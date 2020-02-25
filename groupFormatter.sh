@@ -10,4 +10,9 @@
 
 # Ex: mothur > make.group(fasta=sample1.fasta-sample2.fasta-sample3.fasta, groups=A-B-C)
 
+for i in *.fasta; do
+	echo "$i" >> groups.temp
+done
 
+tr "\n" "-" < groups.temp > group_paren.txt
+rm groups.temp
