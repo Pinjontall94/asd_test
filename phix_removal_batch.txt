@@ -1,0 +1,1 @@
+remove.seqs(fasta=merged.screened.fasta, group=merged.groups, accnos=PhiX.accnos)
