@@ -13,12 +13,13 @@ F=$(head -n 1 *primers.txt)
 
 R=$(tail -n 1 *primers.txt)
 
-module load cutadapt/2.0
+#module load cutadapt/2.0 # comment out when on local machine!
 
 for x in *.fasta; do
 m=$(basename $x | sed 's/\.fasta//')
 
-#echo "Dry run on $x as \$x, $m as \$m"
+echo "Test run on $x as \$x, $m as \$m"
+echo "Forward = $F" && echo "Reverse = $R"
 cutadapt -g $F -o $m.temp.fasta $x --discard-untrimmed
 cutadapt -a $R -o $m.trimmed.fasta $m.temp.fasta --discard-untrimmed
 done
