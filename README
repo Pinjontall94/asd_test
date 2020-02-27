@@ -52,3 +52,11 @@ for arbitrary sequences is a high priority going forward!)
 12. Screen Sequences with mothur
 	-- script: ./mothur screening_batch.txt
 	-- (Relevant Info): ASD_metaanal_screening_fasta.txt
+
+
+----------------
+- Dependencies -
+----------------
+
+bbmap, bowtie2, mothur, poppler
+sra-toolkit

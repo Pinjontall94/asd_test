@@ -12,6 +12,7 @@
 # INPUT: *.merged.fastq
 # OUTPUT: *.merged.fasta
 
-for i in *.merged.fastq; do
-	reformat.sh in=$i out=$(basename $i | sed 's/fastq/fasta/')
+for i in *.merged.extendedFrags.fastq; do
+	#./reformat.sh in=$i out=$(basename $i | sed 's/fastq/fasta/') # if bbmap is local binary
+	reformat.sh in=$i out=$(basename $i | sed 's/fastq/fasta/') # if bbmap is in PATH
 done

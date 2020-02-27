@@ -13,7 +13,7 @@
 shopt -s nullglob
 if [[ ! -z $(ls | grep \.pdf) ]]; then
 	for f in *.pdf; do
-		pdftotext -layout $f # convert pdf files to parsable txt files
+		pdftotext $f # convert pdf files to parsable txt files
 		r=$(echo $f | sed 's/\.pdf/.txt/')
 		if [[ ! -z $(grep -Eo "[A-Z]{3,}[[:digit:]]{5,}" $r) ]]; then
 			cat $r | grep -Eo "[A-Z]{3,}[[:digit:]]{5,}" $r > \
@@ -24,6 +24,10 @@ if [[ ! -z $(ls | grep \.pdf) ]]; then
 		else 
 			echo "No valid accession number found in file: $f"
 		fi
+
+		# Make primers file for screening [WORK IN PROGRESS]
+		grep -i -P -A 1 "[0-9]{3}f" > $(basename -- $f .pdf)_primers.txt
+		grep -i -P -A 1 "[0-9]{3}r" >> $(basename -- $f .pdf)_primers.txt
 		rm $r
 	done
 else 

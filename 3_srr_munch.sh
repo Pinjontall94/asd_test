@@ -19,7 +19,8 @@ shopt -s nullglob
 #fi
 
 while read x; do
-	fastq-dump --split-3 --gzip $x
+	#fastq-dump --split-3 --gzip $x
+	fastq-dump --split-files --gzip $x
 	for i in *.fastq.gz; do
 		gzip -d $i
 		done		

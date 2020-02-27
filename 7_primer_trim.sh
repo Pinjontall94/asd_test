@@ -9,9 +9,9 @@
 
 
 trim_loop(){
-F=$(head -n 1 ../*primers.txt)
+F=$(head -n 1 *primers.txt)
 
-R=$(tail -n 1 ../*primers.txt)
+R=$(tail -n 1 *primers.txt)
 
 module load cutadapt/2.0
 
