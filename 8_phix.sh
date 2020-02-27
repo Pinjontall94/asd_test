@@ -16,6 +16,9 @@ echo "PhiX screened, generating PhiX accession number file..."
 grep ">" merged.PhiX > PhiX.accnos
 
 if [ -s PhiX.accnos ]; then
-echo "Dry run of remove PhiX..."
-# comm -23 merged.PhiX PhiX.accnos > 
-else 
+    while IFS= ; do read line
+                    grep -v -B 1 "$line" >> clean.merged.fasta
+    done < PhiX.accnos
+else echo "No PhiX detected, renaming merged.fasta for pipeline compatibility"
+     mv merged.fasta clean.merged.fasta
+fi
