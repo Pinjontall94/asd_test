@@ -10,8 +10,10 @@
 
 trim_loop(){
 FORPRIME=$(head -n 1 *primers.txt)
+#FORPRIME=$(head -n 1 *regex.txt)
 
 REVPRIME=$(tail -n 1 *primers.txt)
+#REVPRIME=$(tail -n 1 *regex.txt)
 
 #module load cutadapt/2.0 # comment out when on local machine!
 
@@ -50,12 +52,4 @@ for i in *1.fastq; do                   # Merge all _1 & _2 fastqs
 shopt -u nullglob
 }
 
-#for i in *; do 
-#	if [ -d $i/primer_screening/fastas ]; then 
-#		cd $i/primer_screening/fastas/ 
-		trim_loop 
-#		cd ../../../ 
-#	else 
-#		continue; 
-#	fi; 
-#done
+trim_loop 
