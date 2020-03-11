@@ -6,35 +6,32 @@
 # DEPENDS: poppler-utils, bash
 
 sraFinder(){
-# INPUT: .pdf
-# OUTPUT: .sra
+	# Simple grep parser for all NCBI SRA accession numbers in pdf files in the working directory
+	# usage: <sraFinder.sh>
 
-# Simple grep parser for all NCBI SRA accession numbers in pdf files in the working directory
-# usage: <sraFinder.sh> 
+	shopt -s nullglob
+	if [[ ! -z $(ls | grep \.pdf) ]]; then
+		for f in *.pdf; do
+			pdftotext $f # convert pdf files to parsable txt files
+			r=$(echo $f | sed 's/\.pdf/.txt/')
+			if [[ ! -z $(grep -Eo "[A-Z]{3,}[[:digit:]]{5,}" $r) ]]; then
+				cat $r | grep -Eo "[A-Z]{3,}[[:digit:]]{5,}" $r > \
+					$(echo $r | sed 's/\.txt//').sra
+				# echo anything in txt that has =>3 capitals, followed
+				# 	by => 5 numbers, into a new file with a ".sra"
+				# 	extension (regex: [A-Z]{3,}[[:digit:]]{5,} )
+			else
+				echo "No valid accession number found in file: $f"
+			fi
 
-shopt -s nullglob
-if [[ ! -z $(ls | grep \.pdf) ]]; then
-	for f in *.pdf; do
-		pdftotext $f # convert pdf files to parsable txt files
-		r=$(echo $f | sed 's/\.pdf/.txt/')
-		if [[ ! -z $(grep -Eo "[A-Z]{3,}[[:digit:]]{5,}" $r) ]]; then
-			cat $r | grep -Eo "[A-Z]{3,}[[:digit:]]{5,}" $r > \
-				$(echo $r | sed 's/\.txt//').sra
-			# echo anything in txt that has =>3 capitals, followed
-			# 	by => 5 numbers, into a new file with a ".sra"
-			# 	extension (regex: [A-Z]{3,}[[:digit:]]{5,} )
-		else 
-			echo "No valid accession number found in file: $f"
-		fi
-
-		# Make primers file for screening [WORK IN PROGRESS]
-		grep -i -P -A 1 "[0-9]{3}f" > $(basename -- $f .pdf)_primers.txt
-		grep -i -P -A 1 "[0-9]{3}r" >> $(basename -- $f .pdf)_primers.txt
-		rm $r
-	done
-else 
-	echo "Error: no valid .pdf files found in this directory!"
-fi
+			# Make primers file for screening [WORK IN PROGRESS]
+			grep -i -P -A 1 "[0-9]{3}f" > $(basename -- $f .pdf)_primers.txt
+			grep -i -P -A 1 "[0-9]{3}r" >> $(basename -- $f .pdf)_primers.txt
+			rm $r
+		done
+	else
+		echo "Error: no valid .pdf files found in this directory!"
+	fi
 }
 sraFinder
 
@@ -45,7 +42,7 @@ sraFinder
 #	accession list, etc.
 #
 # 	https://www.ncbi.nlm.nih.gov/sra/?term=<SRA NUMBER HERE>
-# 	
+#
 # 	Must grab from run selector! e.g. for https://www.ncbi.nlm.nih.gov/bioproject/PRJNA561262
 # 	Dang it, I can't find anything for the specific buttons for RunTableInfo and Accession List;
 #	I don't know enough javascript to figure out how to connect to what those buttons do. Maybe
@@ -56,127 +53,109 @@ sraFinder
 
 
 srrMunch(){
-# Short script to loop through SRRs in an SRA list, running fastq-dump, and
-# 	nicely formatting them with bbtools' reformat.sh (for now, with manual
-#	read number relabeling).
-# usage: srr_munch.sh <sra_list.txt>
+	# Short script to loop through SRRs in an SRA list, running fastq-dump, and
+	# 	nicely formatting them with bbtools' reformat.sh (for now, with manual
+	#	read number relabeling).
 
-# INPUT: SRR_Acc_List.txt
-# OUTPUT: *.fastq
+	# Old snippet to run on default output file from NCBI (SRR_Acc_List.txt)
+	shopt -s nullglob
 
-# Old snippet to run on default output file from NCBI (SRR_Acc_List.txt)
-shopt -s nullglob
-#if [[ ! -z $(ls | grep "SRR_Acc_List.*txt") ]]; then
-#		while read seq; do
-#			fastq-dump --split-3 --gzip $seq
-#			echo "dump: $seq"
-#		done < $(ls | grep "SRR_Acc_List.*txt")
-#fi
-
-while read x; do
-	#fastq-dump --split-3 --gzip $x
-	fastq-dump --split-files --gzip $x
-	for i in *.fastq.gz; do
-		gzip -d $i
-		done		
-done < $(ls | grep "SRR_Acc_List.*\.txt")
+	while read x; do
+		#fastq-dump --split-3 --gzip $x
+		fastq-dump --split-files --gzip $x
+		for i in *.fastq.gz; do
+			gzip -d $i
+			done
+	done < $(ls | grep "SRR_Acc_List.*\.txt")
 }
 srrMunch
-
-
-
-# Description: A tool that takes an SraRunTable file from NCBI and outputs all
-# 		SRR's that contain "16S"
-
-# INPUT: SraRunTable.csv
-# OUTPUT: 16S/,*.fastq
 
 FPRIMER="GTGCCAGC(A|C)GCCGCGGTAA"
 RUNTABLE=SraRunTable.txt
 
 16sExtractor(){
-mkdir 16S_temp filter
-if [ -f $RUNTABLE ]; then
-	awk -F "," '/16S/ { print $1 }' $RUNTABLE > 16S_list.txt.temp
-	while read line; do
-		echo "$line.fastq"
-		eval mv $line*.fastq 16S_temp
-	done < 16S_list.txt.temp
-	rm 16S_list.txt.temp
-	mv *.fastq filter 
-	mv 16S_temp/* . && rmdir 16S_temp
-else	
-	echo "No SraRunTable.csv found! Try grep -B 1 -E \"<FORWARD PRIMER>\" on fastqs"
-	echo "\nExample output:"
-	grep -EB 1 $FPRIMER
-	# Put grep tool for generating 16S list here 
-	# 	(Note: Add both "FPRIMER" __and__ "^FPRIMER" versions, and separate
-	# 	their results in different directories)
-#	        head -n 2 *.fastq \
-#	        | grep -EB 1 $FPRIMER \
-#	        | grep -o "SRR[0-9]\+" \
-#	        | sed 's/$/.fastq/'
-        echo "Error: No fastq files found in current directory"
-fi
+	# Description: A tool that takes an SraRunTable file from NCBI and outputs all
+	# 		SRR's that contain "16S"
+
+	mkdir 16S_temp filter
+	if [ -f $RUNTABLE ]; then
+		awk -F "," '/16S/ { print $1 }' $RUNTABLE > 16S_list.txt.temp
+		while read line; do
+			echo "$line.fastq"
+			eval mv $line*.fastq 16S_temp
+		done < 16S_list.txt.temp
+		rm 16S_list.txt.temp
+		mv *.fastq filter
+		mv 16S_temp/* . && rmdir 16S_temp
+	else
+		echo "No SraRunTable.csv found! Try grep -B 1 -E \"<FORWARD PRIMER>\" on fastqs"
+		echo "\nExample output:"
+		grep -EB 1 $FPRIMER
+		# Put grep tool for generating 16S list here
+		# 	(Note: Add both "FPRIMER" __and__ "^FPRIMER" versions, and separate
+		# 	their results in different directories)
+	#	        head -n 2 *.fastq \
+	#	        | grep -EB 1 $FPRIMER \
+	#	        | grep -o "SRR[0-9]\+" \
+	#	        | sed 's/$/.fastq/'
+	        echo "Error: No fastq files found in current directory"
+	fi
 }
 16sExtractor
 
 
 
 mergeSeqs(){
-# flash2_merge.sh
-# DESCRIPTION: A simple script that runs flash2 to merge all fastqs in the current
-# 	directory.
+	# flash2_merge.sh
+	# DESCRIPTION: A simple script that runs flash2 to merge all fastqs in the current
+	# 	directory.
 
-# Deps: flash2
-# NOTE: RUN AFTER: --- srr_munch.sh
-#	RUN BEFORE: -- q2a_reformat.sh
+	# Deps: flash2
+	# NOTE: RUN AFTER: --- srr_munch.sh
+	#	RUN BEFORE: -- q2a_reformat.sh
 
-# INPUT: *.fastq
-# OUTPUT: *.merged.fastq
+	shopt -s nullglob
 
-shopt -s nullglob
+	for i in *1.fastq; do			# Merge all _1 & _2 fastqs
+		if [ -f *_1.fastq ]; then
+			SUF_REGX="s/_1\.fastq/_2.fastq/"
+		elif [ -f *_R1.fastq ]; then
+			SUF_REGX="s/_R1\.fastq/_R2.fastq/"
+		elif [ -f *_R1.fastq ] && [ -f *_1.fastq ]; then
+			echo "Problems!"
+			exit 1
+		else
+			exit 0
+		fi
+		REV=$(basename "$i" | sed $SUF_REGX)
+		OUT_FILE=$(basename "$i" | sed -e 's/_\(\|R\)1\.fastq/.merged/')
+		echo "Merging: $i" "$REV"
+		./flash2 "$i" "$REV" 2>&1	\
+			-o $OUT_FILE \
+			| tee -a flash.log
+		done
 
-for i in *1.fastq; do			# Merge all _1 & _2 fastqs
-	if [ -f *_1.fastq ]; then
-		SUF_REGX="s/_1\.fastq/_2.fastq/"
-	elif [ -f *_R1.fastq ]; then
-		SUF_REGX="s/_R1\.fastq/_R2.fastq/"
-	elif [ -f *_R1.fastq ] && [ -f *_1.fastq ]; then
-		echo "Problems!"
-		exit 1
-	else
-		exit 0
-	fi	
-	REV=$(basename "$i" | sed $SUF_REGX) 
-	OUT_FILE=$(basename "$i" | sed -e 's/_\(\|R\)1\.fastq/.merged/')
-	echo "Merging: $i" "$REV"
-	./flash2 "$i" "$REV" 2>&1	\
-		-o $OUT_FILE \
-		| tee -a flash.log
-	done
-
-shopt -u nullglob
+	shopt -u nullglob
 }
 mergeSeqs
 
 
 
 q2aReformat(){
-# DESCRIPTION: Reformats all fastq files in current directory to fasta
+	# DESCRIPTION: Reformats all fastq files in current directory to fasta
 
-# Deps: bbtools 'reformat' tool
+	# Deps: bbtools 'reformat' tool
 
-# NOTE: RUN AFTER: --- flash2_merge.sh
-#	RUN BEFORE: -- groupFormatter.sh
+	# NOTE: RUN AFTER: --- flash2_merge.sh
+	#	RUN BEFORE: -- groupFormatter.sh
 
-# INPUT: *.merged.fastq
-# OUTPUT: *.merged.fasta
 
-for i in *.merged.extendedFrags.fastq; do
-	#./reformat.sh in=$i out=$(basename $i | sed 's/fastq/fasta/') # if bbmap is local binary
-	reformat.sh in=$i out=$(basename $i | sed 's/fastq/fasta/') # if bbmap is in PATH
-done
+
+
+	for i in *.merged.extendedFrags.fastq; do
+		#./reformat.sh in=$i out=$(basename $i | sed 's/fastq/fasta/') # if bbmap is local binary
+		reformat.sh in=$i out=$(basename $i | sed 's/fastq/fasta/') # if bbmap is in PATH
+	done
 }
 q2aReformat
 
@@ -187,122 +166,122 @@ FORPRIME=$(head -n 1 *primers.txt)
 REVPRIME=$(tail -n 1 *primers.txt)
 
 # Set barcode lengths
-FORTRIM=28
-REVTRIM=20
+#FORTRIM=28
+#REVTRIM=20
 
 trim_loop(){
-# Takes the primer patterns in the directory above 
-# $(pwd), inputs to cutadapt, and loops through all fasta # files in $(pwd)
-
-# INPUT: *primers.txt,*.fasta
-# OUTPUT: *.trimmed.fasta
-
-# Load cutadapt if necessary
-#if [ -z $(command -v cutadapt) ]; then
-#    module load cutadapt/2.0 # comment out when on local machine!
-#else
-#    echo "cutadapt not found in PATH or module list" && exit 1
-#fi
+	# Takes the primer patterns in the directory above
+	# $(pwd), inputs to cutadapt, and loops through all fasta # files in $(pwd)
 
 
-# Loop over merged fastas
-for x in *.fasta; do
-	m=$(basename $x .fasta)
 
-	cutadapt -g $FORPRIME -o $m.temp.fasta $x --discard-untrimmed
-	cutadapt -u -$REVTRIM -a $REVPRIME -o $m.trimmed.fasta $m.temp.fasta --discard-untrimmed
 
-done
+	# Load cutadapt if necessary
+	#if [ -z $(command -v cutadapt) ]; then
+	#    module load cutadapt/2.0 # comment out when on local machine!
+	#else
+	#    echo "cutadapt not found in PATH or module list" && exit 1
+	#fi
 
-## Loop over unmerged fastqs
-#shopt -s nullglob
-#
-#PAT="[0-9]{4,}_1.fastq"
-#PAT_R="[0-9]{4,}_R1.fastq"
-#
-#for i in *1.fastq; do                   # Merge all _1 & _2 fastqs
-#        if [[ $i =~ $PAT ]]; then
-#                SUF_REGX="s/_1\.fastq/_2.fastq/"
-#        elif [[ $i =~ $PAT_R ]]; then
-#                SUF_REGX="s/_R1\.fastq/_R2.fastq/"
-#        else
-#                exit 0
-#        fi      
-#        REV=$(basename "$i" | sed $SUF_REGX) 
-#	FOUT=$(basename $i .fastq).trimmed
-#	ROUT=$(basename $REV .fastq).trimmed
-#        echo "Trimming Reads for: $i" "$REV"
-#	echo "Forward primer: $FORPRIME"
-#	echo "Reverse primer: $REVPRIME"
-#	echo "Output files: Forward -> $FOUT ; Reverse -> $ROUT"
-#	cutadapt -a $FORPRIME -A $REVPRIME -o $FOUT -p $ROUT $i $REV
-#        done
-#
-#shopt -u nullglob
+
+	# Loop over merged fastas
+	for x in *.fasta; do
+		m=$(basename $x .fasta)
+
+		cutadapt -g $FORPRIME -o $m.temp.fasta $x --discard-untrimmed
+		cutadapt -u -$REVTRIM -a $REVPRIME -o $m.trimmed.fasta $m.temp.fasta --discard-untrimmed
+
+	done
+
+	## Loop over unmerged fastqs
+	#shopt -s nullglob
+	#
+	#PAT="[0-9]{4,}_1.fastq"
+	#PAT_R="[0-9]{4,}_R1.fastq"
+	#
+	#for i in *1.fastq; do                   # Merge all _1 & _2 fastqs
+	#        if [[ $i =~ $PAT ]]; then
+	#                SUF_REGX="s/_1\.fastq/_2.fastq/"
+	#        elif [[ $i =~ $PAT_R ]]; then
+	#                SUF_REGX="s/_R1\.fastq/_R2.fastq/"
+	#        else
+	#                exit 0
+	#        fi
+	#        REV=$(basename "$i" | sed $SUF_REGX)
+	#	FOUT=$(basename $i .fastq).trimmed
+	#	ROUT=$(basename $REV .fastq).trimmed
+	#        echo "Trimming Reads for: $i" "$REV"
+	#	echo "Forward primer: $FORPRIME"
+	#	echo "Reverse primer: $REVPRIME"
+	#	echo "Output files: Forward -> $FOUT ; Reverse -> $ROUT"
+	#	cutadapt -a $FORPRIME -A $REVPRIME -o $FOUT -p $ROUT $i $REV
+	#        done
+	#
+	#shopt -u nullglob
 }
-trim_loop 
+trim_loop
 
 
 
 phixTrim(){
-# DESCRIPTION: Takes in a fasta file, phix databases in a directory named 
-# 	$PWD/phix_db/ and screens for PhiX contamination
+	# DESCRIPTION: Takes in a fasta file, phix databases in a directory named
+	# 	$PWD/phix_db/ and screens for PhiX contamination
 
-# Deps: bowtie2
-# Note: RUN AFTER: --- mothur > ~/code/shell/bioinf/screening_batch.txt
-#	RUN BEFORE: -- mothur > ~/code/shell/bioinf/phix_removal_batch.txt
-# INPUT: samples.trim.contigs.fasta
-# OUTPUT: merged.bowtie,merged.PhiX,PhiX.accnos
+	# Deps: bowtie2
+	# Note: RUN AFTER: --- mothur > ~/code/shell/bioinf/screening_batch.txt
+	#	RUN BEFORE: -- mothur > ~/code/shell/bioinf/phix_removal_batch.txt
 
-bowtie2 -x phix_db/PhiX_bowtie_db -f -U *merged.extendedFrags.trimmed.fasta -S merged.bowtie --un merged.screened --al merged.PhiX --local -p 2
 
-echo "PhiX screened, generating PhiX accession number file..."
-grep ">" merged.PhiX >> PhiX.accnos
 
-#if [ -s PhiX.accnos ]; then
-#    while IFS= ; do read line
-#                    grep -v -B 1 "$line" >> clean.merged.fasta
-#    done < PhiX.accnos
-#else echo "No PhiX detected, renaming merged.fasta for pipeline compatibility"
-#     mv merged.fasta clean.merged.fasta
-#fi
+	bowtie2 -x phix_db/PhiX_bowtie_db -f -U *merged.extendedFrags.trimmed.fasta -S merged.bowtie --un merged.screened --al merged.PhiX --local -p 2
+
+	echo "PhiX screened, generating PhiX accession number file..."
+	grep ">" merged.PhiX >> PhiX.accnos
+
+	#if [ -s PhiX.accnos ]; then
+	#    while IFS= ; do read line
+	#                    grep -v -B 1 "$line" >> clean.merged.fasta
+	#    done < PhiX.accnos
+	#else echo "No PhiX detected, renaming merged.fasta for pipeline compatibility"
+	#     mv merged.fasta clean.merged.fasta
+	#fi
 }
 phixTrim
 
 groupConcat(){
-# group_concat.sh
-# Concat all *trimmed*fasta files in current directory
+	# group_concat.sh
+	# Concat all *trimmed*fasta files in current directory
 
-for x in *trimmed*; do
-	#echo "Dry run of cat $x to $(basename $x | sed 's/_.*$//').trimmed.concat.fasta"
-	cat $x >> $(basename $x | sed 's/_.*$//').trimmed.concat.fasta
-done
+	for x in *trimmed*; do
+		#echo "Dry run of cat $x to $(basename $x | sed 's/_.*$//').trimmed.concat.fasta"
+		cat $x >> $(basename $x | sed 's/_.*$//').trimmed.concat.fasta
+	done
 }
 groupConcat
 
 
 groupFormatter(){
-# Description: Scans current directory for .fasta files, and
-#              formats them for use with the R package Mothur's
-#              'make.group()' command
+	# Description: Scans current directory for .fasta files, and
+	#              formats them for use with the R package Mothur's
+	#              'make.group()' command
 
-# NOTE: RUN AFTER: --- q2a_reformat.sh 
-# 	RUN BEFORE: -- [mothur merge script]
+	# NOTE: RUN AFTER: --- q2a_reformat.sh
+	# 	RUN BEFORE: -- [mothur merge script]
 
-# Ex: mothur > make.group(fasta=sample1.fasta-sample2.fasta-sample3.fasta, groups=A-B-C)
+	# Ex: mothur > make.group(fasta=sample1.fasta-sample2.fasta-sample3.fasta, groups=A-B-C)
 
-for i in *.fasta; do
-	echo "$i" >> groups.temp
-done
+	for i in *.fasta; do
+		echo "$i" >> groups.temp
+	done
 
-tr "\n" "-" < groups.temp > group_paren.txt
-rm groups.temp
+	tr "\n" "-" < groups.temp > group_paren.txt
+	rm groups.temp
 }
 groupFormatter
 
 mothurScreen(){
-# Runs mothur against screening_batch.txt to screen concat'd fasta
+	# Runs mothur against screening_batch.txt to screen concat'd fasta
 
-./mothur screening_batch.txt
+	./mothur screening_batch.txt
 }
 mothurScreen
