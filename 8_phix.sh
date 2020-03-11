@@ -10,7 +10,7 @@
 # INPUT: samples.trim.contigs.fasta
 # OUTPUT: merged.bowtie,merged.PhiX,PhiX.accnos
 
-bowtie2 -x phix_db/PhiX_bowtie_db.* -f -U *merged.extendedFrags.trimmed.fasta -S merged.bowtie --un merged.screened --al merged.PhiX --local -p 2
+bowtie2 -x phix_db/PhiX_bowtie_db -f -U *merged.extendedFrags.trimmed.fasta -S merged.bowtie --un merged.screened --al merged.PhiX --local -p 2
 
 echo "PhiX screened, generating PhiX accession number file..."
 grep ">" merged.PhiX >> PhiX.accnos
