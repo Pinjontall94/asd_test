@@ -5,6 +5,18 @@
 # LICENSE: GNU Affero General Public License https://www.gnu.org/licenses/agpl-3.0.html
 # DEPENDS: poppler-utils, bash
 
+FPRIMER="GTGCCAGC(A|C)GCCGCGGTAA"
+RUNTABLE=SraRunTable.txt
+
+# Set primers
+FORPRIME=$(head -n 1 *primers.txt)
+REVPRIME=$(tail -n 1 *primers.txt)
+
+# Set barcode lengths
+#FORTRIM=28
+#REVTRIM=20
+
+
 sraFinder(){
 	# Simple grep parser for all NCBI SRA accession numbers in pdf files in the working directory
 	# usage: <sraFinder.sh>
@@ -33,7 +45,6 @@ sraFinder(){
 		echo "Error: no valid .pdf files found in this directory!"
 	fi
 }
-sraFinder
 
 # TO DO
 
@@ -68,10 +79,7 @@ srrMunch(){
 			done
 	done < $(ls | grep "SRR_Acc_List.*\.txt")
 }
-srrMunch
 
-FPRIMER="GTGCCAGC(A|C)GCCGCGGTAA"
-RUNTABLE=SraRunTable.txt
 
 16sExtractor(){
 	# Description: A tool that takes an SraRunTable file from NCBI and outputs all
@@ -101,8 +109,6 @@ RUNTABLE=SraRunTable.txt
 	        echo "Error: No fastq files found in current directory"
 	fi
 }
-16sExtractor
-
 
 
 mergeSeqs(){
@@ -117,28 +123,34 @@ mergeSeqs(){
 	shopt -s nullglob
 
 	for i in *1.fastq; do			# Merge all _1 & _2 fastqs
-		if [ -f *_1.fastq ]; then
+		if [[ "$i" =~ "_1.fastq" ]]; then
 			SUF_REGX="s/_1\.fastq/_2.fastq/"
-		elif [ -f *_R1.fastq ]; then
+		elif [[ "$i" =~ "_R1.fastq" ]]; then
 			SUF_REGX="s/_R1\.fastq/_R2.fastq/"
-		elif [ -f *_R1.fastq ] && [ -f *_1.fastq ]; then
-			echo "Problems!"
+
+
+#		if [ -f *_1.fastq ]; then
+#			SUF_REGX="s/_1\.fastq/_2.fastq/"
+#		elif [ -f *_R1.fastq ]; then
+#			SUF_REGX="s/_R1\.fastq/_R2.fastq/"
+#		elif [ -f *_R1.fastq ] && [ -f *_1.fastq ]; then
+#			echo "Problems!"
 			exit 1
 		else
 			exit 0
 		fi
+		echo "$SUF_REGX"
 		REV=$(basename "$i" | sed $SUF_REGX)
 		OUT_FILE=$(basename "$i" | sed -e 's/_\(\|R\)1\.fastq/.merged/')
 		echo "Merging: $i" "$REV"
-		./flash2 "$i" "$REV" 2>&1	\
-			-o $OUT_FILE \
-			| tee -a flash.log
+		bbmerge.sh in1="$i" in2="$REV" out="$OUT_FILE".fastq
+#		./flash2 "$i" "$REV" 2>&1	\
+#			-o $OUT_FILE \
+#			| tee -a flash.log
 		done
 
 	shopt -u nullglob
 }
-mergeSeqs
-
 
 
 q2aReformat(){
@@ -152,22 +164,12 @@ q2aReformat(){
 
 
 
-	for i in *.merged.extendedFrags.fastq; do
+	for i in *.merged.fastq; do
 		#./reformat.sh in=$i out=$(basename $i | sed 's/fastq/fasta/') # if bbmap is local binary
 		reformat.sh in=$i out=$(basename $i | sed 's/fastq/fasta/') # if bbmap is in PATH
 	done
 }
-q2aReformat
 
-
-
-# Set primers
-FORPRIME=$(head -n 1 *primers.txt)
-REVPRIME=$(tail -n 1 *primers.txt)
-
-# Set barcode lengths
-#FORTRIM=28
-#REVTRIM=20
 
 trim_loop(){
 	# Takes the primer patterns in the directory above
@@ -219,8 +221,6 @@ trim_loop(){
 	#
 	#shopt -u nullglob
 }
-trim_loop
-
 
 
 phixTrim(){
@@ -233,7 +233,7 @@ phixTrim(){
 
 
 
-	bowtie2 -x phix_db/PhiX_bowtie_db -f -U *merged.extendedFrags.trimmed.fasta -S merged.bowtie --un merged.screened --al merged.PhiX --local -p 2
+	bowtie2 -x phix_db/PhiX_bowtie_db -f -U *merged.fasta -S merged.bowtie --un merged.screened --al merged.PhiX --local -p 2
 
 	echo "PhiX screened, generating PhiX accession number file..."
 	grep ">" merged.PhiX >> PhiX.accnos
@@ -246,7 +246,7 @@ phixTrim(){
 	#     mv merged.fasta clean.merged.fasta
 	#fi
 }
-phixTrim
+
 
 groupConcat(){
 	# group_concat.sh
@@ -257,7 +257,6 @@ groupConcat(){
 		cat $x >> $(basename $x | sed 's/_.*$//').trimmed.concat.fasta
 	done
 }
-groupConcat
 
 
 groupFormatter(){
@@ -276,12 +275,30 @@ groupFormatter(){
 
 	tr "\n" "-" < groups.temp > group_paren.txt
 	rm groups.temp
+	
 }
-groupFormatter
+
 
 mothurScreen(){
 	# Runs mothur against screening_batch.txt to screen concat'd fasta
 
 	./mothur screening_batch.txt
 }
-mothurScreen
+#grep -Eo "[A-Z]{3,6}[0-9]{4,6}" ../usda/docs/pdf/Hewavitharana_etal_2019_Temporal_Dynamics_ASD_metabolome.txt
+#https://www.ncbi.nlm.nih.gov/search/all/\?term\=PRJNA561262
+#https://www.ncbi.nlm.nih.gov/bioproject/PRJNA561262
+#https://www.ncbi.nlm.nih.gov/sra\?linkname\=bioproject_sra_all\&from_uid\=561262
+#https://www.ncbi.nlm.nih.gov/Traces/study/\?WebEnv\=NCID_1_91785073_130.14.22.33_5555_1583974610_681314290_0MetA0_S_HStore\&query_key\=2
+#https://www.ncbi.nlm.nih.gov/Traces/study/\?query_key\=2\&WebEnv\=NCID_1_91785073_130.14.22.33_5555_1583974610_681314290_0MetA0_S_HStore\&o\=acc_s%3Aa
+
+
+#sraFinder
+#srrMunch
+#16sExtractor
+mergeSeqs
+q2aReformat
+trim_loop
+phixTrim
+groupConcat
+groupFormatter
+#mothurScreen
