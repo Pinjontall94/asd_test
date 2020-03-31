@@ -1,0 +1,1 @@
+make.group(SRR10007909.merged.fasta-SRR10007909.merged.temp.fasta-SRR10007910.merged.fasta-SRR10007910.merged.temp.fasta-*trimmed*.trimmed.concat.fasta)

@@ -116,7 +116,7 @@ mergeSeqs(){
 	# DESCRIPTION: A simple script that runs flash2 to merge all fastqs in the current
 	# 	directory.
 
-	# Deps: flash2
+	# Deps: bbmerge.sh
 	# NOTE: RUN AFTER: --- srr_munch.sh
 	#	RUN BEFORE: -- q2a_reformat.sh
 
@@ -127,26 +127,33 @@ mergeSeqs(){
 			SUF_REGX="s/_1\.fastq/_2.fastq/"
 		elif [[ "$i" =~ "_R1.fastq" ]]; then
 			SUF_REGX="s/_R1\.fastq/_R2.fastq/"
-
-
-#		if [ -f *_1.fastq ]; then
-#			SUF_REGX="s/_1\.fastq/_2.fastq/"
-#		elif [ -f *_R1.fastq ]; then
-#			SUF_REGX="s/_R1\.fastq/_R2.fastq/"
-#		elif [ -f *_R1.fastq ] && [ -f *_1.fastq ]; then
-#			echo "Problems!"
 			exit 1
 		else
 			exit 0
 		fi
 		echo "$SUF_REGX"
 		REV=$(basename "$i" | sed $SUF_REGX)
+		READ_NAME=$(basename $i _1.fastq)
 		OUT_FILE=$(basename "$i" | sed -e 's/_\(\|R\)1\.fastq/.merged/')
-		echo "Merging: $i" "$REV"
-		bbmerge.sh in1="$i" in2="$REV" out="$OUT_FILE".fastq
-#		./flash2 "$i" "$REV" 2>&1	\
-#			-o $OUT_FILE \
-#			| tee -a flash.log
+
+		# Make sure the read numbers are identical between forward 
+		# 	and reverse
+		echo "Checking: $i" "$REV"
+		F_READ_NUM=$(grep -c "@$READ_NAME" $i)
+		R_READ_NUM=$(grep -c "@$READ_NAME" $REV)
+		
+		if [[ "$F_READ_NUM" == "$R_READ_NUM" ]]; then
+			echo "Read counts match! Now merging: $i" "$REV"
+			bbmerge.sh in1="$i" in2="$REV" out="$OUT_FILE".fastq
+	#		./flash2 "$i" "$REV" 2>&1	\
+	#			-o $OUT_FILE \
+	#			| tee -a flash.log
+		else 
+			echo "Mismatch found, delete reads and \
+				re-run fastq-dump before proceeding"
+			# rm $i $REV && srrMunch
+			# exit 0
+		fi
 		done
 
 	shopt -u nullglob
