@@ -5,17 +5,36 @@
 # LICENSE: GNU Affero General Public License https://www.gnu.org/licenses/agpl-3.0.html
 # DEPENDS: poppler-utils, bash
 
-FPRIMER="GTGCCAGC(A|C)GCCGCGGTAA"
 RUNTABLE=SraRunTable.txt
+ACCESSION_LIST=SRR_Acc_List.txt
 
 # Set primers
-FORPRIME=$(head -n 1 *primers.txt)
-REVPRIME=$(tail -n 1 *primers.txt)
+FORPRIME=$1
+REVPRIME=$2
 
 # Set barcode lengths
 #FORTRIM=28
 #REVTRIM=20
 
+# Define use flags
+
+
+nucRegex(){
+	echo $1 | sed '
+	s/W/(A|T)/
+	s/S/(C|T)/
+	s/M/(A|C)/
+	s/K/(G|T)/
+	s/R/(A|G)/
+	s/Y/(C|T)/
+	s/B/[CGT]/
+	s/D/[AGT]/
+	s/H/[ACT]/
+	s/V/[ACG]/
+	s/N/./
+	s/X/./
+	'
+}
 
 sraFinder(){
 	# Simple grep parser for all NCBI SRA accession numbers in pdf files in the working directory
@@ -77,12 +96,12 @@ srrMunch(){
 		for i in *.fastq.gz; do
 			gzip -d $i
 			done
-	done < $(ls | grep "SRR_Acc_List.*\.txt")
+	done < $ACCESSION_LIST
 }
 
 
 16sExtractor(){
-	# Description: A tool that takes an SraRunTable file from NCBI and outputs all
+	# Description: takes an SraRunTable file from NCBI and outputs all
 	# 		SRR's that contain "16S"
 
 	mkdir 16S_temp filter
@@ -96,9 +115,9 @@ srrMunch(){
 		mv *.fastq filter
 		mv 16S_temp/* . && rmdir 16S_temp
 	else
-		echo "No SraRunTable.csv found! Try grep -B 1 -E \"<FORWARD PRIMER>\" on fastqs"
+		echo "No SraRunTable.txt found! Try grep -B 1 -E \"<FORWARD PRIMER>\" on fastqs"
 		echo "\nExample output:"
-		grep -EB 1 $FPRIMER
+		grep -EB 1 $(nucRegex $FORPRIME)
 		# Put grep tool for generating 16S list here
 		# 	(Note: Add both "FPRIMER" __and__ "^FPRIMER" versions, and separate
 		# 	their results in different directories)
@@ -112,8 +131,7 @@ srrMunch(){
 
 
 mergeSeqs(){
-	# flash2_merge.sh
-	# DESCRIPTION: A simple script that runs flash2 to merge all fastqs in the current
+	# DESCRIPTION: A simple script that runs bbmerge.sh to merge all fastqs in the current
 	# 	directory.
 
 	# Deps: bbmerge.sh
@@ -122,7 +140,8 @@ mergeSeqs(){
 
 	shopt -s nullglob
 
-	for i in *1.fastq; do			# Merge all _1 & _2 fastqs
+	# Merge all _1 & _2 fastqs	
+	for i in *1.fastq; do			
 		if [[ "$i" =~ "_1.fastq" ]]; then
 			SUF_REGX="s/_1\.fastq/_2.fastq/"
 		elif [[ "$i" =~ "_R1.fastq" ]]; then
@@ -132,9 +151,9 @@ mergeSeqs(){
 			exit 0
 		fi
 		echo "$SUF_REGX"
-		REV=$(basename "$i" | sed $SUF_REGX)
+		REV=$(echo "$i" | sed $SUF_REGX)
 		READ_NAME=$(basename $i _1.fastq)
-		OUT_FILE=$(basename "$i" | sed -e 's/_\(\|R\)1\.fastq/.merged/')
+		OUT_FILE=$(echo "$i" | sed -E 's/_\(\|R\)1\.fastq/.merged/')
 
 		# Make sure the read numbers are identical between forward 
 		# 	and reverse
@@ -143,11 +162,10 @@ mergeSeqs(){
 		R_READ_NUM=$(grep -c "@$READ_NAME" $REV)
 		
 		if [[ "$F_READ_NUM" == "$R_READ_NUM" ]]; then
-			echo "Read counts match! Now merging: $i" "$REV"
+			echo "Read counts match!"
+			echo "F Reads: $F_READ_NUM \t R Reads: $R_READ_NUM"
+			echo "Now merging: $i" "$REV"
 			bbmerge.sh in1="$i" in2="$REV" out="$OUT_FILE".fastq
-	#		./flash2 "$i" "$REV" 2>&1	\
-	#			-o $OUT_FILE \
-	#			| tee -a flash.log
 		else 
 			echo "Mismatch found, delete reads and \
 				re-run fastq-dump before proceeding"
@@ -168,22 +186,16 @@ q2aReformat(){
 	# NOTE: RUN AFTER: --- flash2_merge.sh
 	#	RUN BEFORE: -- groupFormatter.sh
 
-
-
-
 	for i in *.merged.fastq; do
-		#./reformat.sh in=$i out=$(basename $i | sed 's/fastq/fasta/') # if bbmap is local binary
-		reformat.sh in=$i out=$(basename $i | sed 's/fastq/fasta/') # if bbmap is in PATH
+		#./reformat.sh in=$i out=$(echo "$i" | sed 's/fastq/fasta/') # if bbmap is local binary
+		reformat.sh in=$i out=$(echo "$i" | sed 's/fastq/fasta/') # if bbmap is in PATH
 	done
 }
 
 
 trim_loop(){
-	# Takes the primer patterns in the directory above
-	# $(pwd), inputs to cutadapt, and loops through all fasta # files in $(pwd)
-
-
-
+	# Takes the primer patterns from command line,
+	# inputs to cutadapt, and loops through all fasta # files in $(pwd)
 
 	# Load cutadapt if necessary
 	#if [ -z $(command -v cutadapt) ]; then
@@ -198,35 +210,9 @@ trim_loop(){
 		m=$(basename $x .fasta)
 
 		cutadapt -g $FORPRIME -o $m.temp.fasta $x --discard-untrimmed
-		cutadapt -u -$REVTRIM -a $REVPRIME -o $m.trimmed.fasta $m.temp.fasta --discard-untrimmed
+		cutadapt -a $REVPRIME -o $m.trimmed.fasta $m.temp.fasta --discard-untrimmed
 
 	done
-
-	## Loop over unmerged fastqs
-	#shopt -s nullglob
-	#
-	#PAT="[0-9]{4,}_1.fastq"
-	#PAT_R="[0-9]{4,}_R1.fastq"
-	#
-	#for i in *1.fastq; do                   # Merge all _1 & _2 fastqs
-	#        if [[ $i =~ $PAT ]]; then
-	#                SUF_REGX="s/_1\.fastq/_2.fastq/"
-	#        elif [[ $i =~ $PAT_R ]]; then
-	#                SUF_REGX="s/_R1\.fastq/_R2.fastq/"
-	#        else
-	#                exit 0
-	#        fi
-	#        REV=$(basename "$i" | sed $SUF_REGX)
-	#	FOUT=$(basename $i .fastq).trimmed
-	#	ROUT=$(basename $REV .fastq).trimmed
-	#        echo "Trimming Reads for: $i" "$REV"
-	#	echo "Forward primer: $FORPRIME"
-	#	echo "Reverse primer: $REVPRIME"
-	#	echo "Output files: Forward -> $FOUT ; Reverse -> $ROUT"
-	#	cutadapt -a $FORPRIME -A $REVPRIME -o $FOUT -p $ROUT $i $REV
-	#        done
-	#
-	#shopt -u nullglob
 }
 
 
@@ -303,10 +289,10 @@ mothurScreen(){
 #sraFinder
 #srrMunch
 #16sExtractor
-mergeSeqs
-q2aReformat
-trim_loop
-phixTrim
-groupConcat
-groupFormatter
+#mergeSeqs
+#q2aReformat
+#trim_loop
+#phixTrim
+#groupConcat
+#groupFormatter
 #mothurScreen
