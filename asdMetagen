@@ -5,6 +5,7 @@
 # LICENSE: GNU Affero General Public License https://www.gnu.org/licenses/agpl-3.0.html
 # DEPENDS: poppler-utils, bash
 
+# Set input files
 RUNTABLE=SraRunTable.txt
 ACCESSION_LIST=SRR_Acc_List.txt
 
@@ -12,14 +13,18 @@ ACCESSION_LIST=SRR_Acc_List.txt
 FORPRIME=$1
 REVPRIME=$2
 
-# Set barcode lengths
-#FORTRIM=28
-#REVTRIM=20
-
 # Define use flags
-
+while getopts "h" FLAGS; do
+	case $FLAGS in
+		h)
+			echo "asdMetagen: Usage: ./asdMetagen <forward primer> <reverse primer>"
+			exit;;
+	esac
+done
 
 nucRegex(){
+	# Convert degenerate bases to regex patterns
+
 	echo $1 | sed '
 	s/W/(A|T)/
 	s/S/(C|T)/
@@ -63,6 +68,8 @@ sraFinder(){
 	else
 		echo "Error: no valid .pdf files found in this directory!"
 	fi
+
+	shopt -u nullglob
 }
 
 # TO DO
@@ -81,6 +88,22 @@ sraFinder(){
 #	docs. So it'd have to be interactive....maybe this would be a good project to learn some
 #	GUI skills for...
 
+sufRegex(){
+	# Takes in unmerged fastq ending in _1|_R1,
+	# 	and returns suffic regex and the name
+	# 	of the reverse read
+
+	if [[ "$1" =~ "_1.fastq" ]]; then
+		SUF_REGX="s/_1\.fastq/_2.fastq/"
+	elif [[ "$1" =~ "_R1.fastq" ]]; then
+		SUF_REGX="s/_R1\.fastq/_R2.fastq/"
+	else
+		echo "asdMetagen: Error: Expected merge suffices not found" >&2
+		exit 1
+	fi
+	echo "asdMetagen: Suffix Regex: $SUF_REGX"
+	REV=$(echo "$1" | sed $SUF_REGX)
+}
 
 srrMunch(){
 	# Short script to loop through SRRs in an SRA list, running fastq-dump, and
@@ -91,12 +114,36 @@ srrMunch(){
 	shopt -s nullglob
 
 	while read x; do
-		#fastq-dump --split-3 --gzip $x
-		fastq-dump --split-files --gzip $x
-		for i in *.fastq.gz; do
-			gzip -d $i
-			done
+		if [ -f "$x.fastq.gz" ]; then
+			# in case the download glitches and needs to be re-run
+			continue
+		else
+        	#fastq-dump --split-3 --gzip $x
+			fastq-dump --split-files --gzip $x
+			gzip -d $(basename $x .fastq.gz)*.fastq
+			FORWARD="$(basename $x)*_*1.fastq"
+		fi
 	done < $ACCESSION_LIST
+
+	# Check that each fastq pair have the same read numbers
+	for i in *_*1.fastq; do
+		sufRegex $i
+		READ_NAME=$(basename $i _1.fastq)
+		F_READ_NUM=$(grep -c "@$READ_NAME" $i)
+		R_READ_NUM=$(grep -c "@$READ_NAME" $REV)
+
+		if [ $F_READ_NUM = $R_READ_NUM ]; then
+			echo "asdMetagen: Read counts match"
+			echo "asdMetagen: F Reads: $F_READ_NUM \t R Reads: $R_READ_NUM"
+		else
+			echo "Mismatch found, delete reads and \
+				re-run fastq-dump before proceeding"
+			rm $i $REV && srrMunch $READNAME
+			continue
+		fi
+	done
+
+	shopt -u nullglob
 }
 
 
@@ -106,13 +153,14 @@ srrMunch(){
 
 	mkdir 16S_temp filter
 	if [ -f $RUNTABLE ]; then
+		# create list of 16S seqs from the runtable
 		awk -F "," '/16S/ { print $1 }' $RUNTABLE > 16S_list.txt.temp
 		while read line; do
 			echo "$line.fastq"
-			eval mv $line*.fastq 16S_temp
+			eval mv $line*.fastq 16S_temp # move 16S seqs to temp dir
 		done < 16S_list.txt.temp
 		rm 16S_list.txt.temp
-		mv *.fastq filter
+		mv *.fastq filter	# move the non-match seqs to the filter
 		mv 16S_temp/* . && rmdir 16S_temp
 	else
 		echo "No SraRunTable.txt found! Try grep -B 1 -E \"<FORWARD PRIMER>\" on fastqs"
@@ -140,33 +188,33 @@ mergeSeqs(){
 
 	shopt -s nullglob
 
-	# Merge all _1 & _2 fastqs	
-	for i in *1.fastq; do			
+	# Merge all _1 & _2 fastqs
+	for i in *1.fastq; do
 		if [[ "$i" =~ "_1.fastq" ]]; then
 			SUF_REGX="s/_1\.fastq/_2.fastq/"
 		elif [[ "$i" =~ "_R1.fastq" ]]; then
 			SUF_REGX="s/_R1\.fastq/_R2.fastq/"
-			exit 1
 		else
-			exit 0
+			echo "asdMetagen: Error: Expected merge suffices not found" >&2
+			exit 1
 		fi
-		echo "$SUF_REGX"
+		echo "asdMetagen: Suffix Regex: $SUF_REGX"
 		REV=$(echo "$i" | sed $SUF_REGX)
 		READ_NAME=$(basename $i _1.fastq)
 		OUT_FILE=$(echo "$i" | sed -E 's/_\(\|R\)1\.fastq/.merged/')
 
-		# Make sure the read numbers are identical between forward 
+		# Make sure the read numbers are identical between forward
 		# 	and reverse
 		echo "Checking: $i" "$REV"
 		F_READ_NUM=$(grep -c "@$READ_NAME" $i)
 		R_READ_NUM=$(grep -c "@$READ_NAME" $REV)
-		
+
 		if [[ "$F_READ_NUM" == "$R_READ_NUM" ]]; then
 			echo "Read counts match!"
 			echo "F Reads: $F_READ_NUM \t R Reads: $R_READ_NUM"
 			echo "Now merging: $i" "$REV"
 			bbmerge.sh in1="$i" in2="$REV" out="$OUT_FILE".fastq
-		else 
+		else
 			echo "Mismatch found, delete reads and \
 				re-run fastq-dump before proceeding"
 			# rm $i $REV && srrMunch
@@ -187,9 +235,14 @@ q2aReformat(){
 	#	RUN BEFORE: -- groupFormatter.sh
 
 	for i in *.merged.fastq; do
-		#./reformat.sh in=$i out=$(echo "$i" | sed 's/fastq/fasta/') # if bbmap is local binary
-		reformat.sh in=$i out=$(echo "$i" | sed 's/fastq/fasta/') # if bbmap is in PATH
+		if [ -z $(type -P reformat.sh) ] && [ -f reformat.sh ]; then
+			COMMAND="./reformat.sh"
+		elif [ ! -z $(type -P reformat.sh) ]; then
+			COMMAND="reformat.sh"
+		fi
 	done
+
+	$COMMAND in=$i out=$(echo "$i" | sed 's/fastq/fasta/')
 }
 
 
@@ -226,7 +279,8 @@ phixTrim(){
 
 
 
-	bowtie2 -x phix_db/PhiX_bowtie_db -f -U *merged.fasta -S merged.bowtie --un merged.screened --al merged.PhiX --local -p 2
+	  bowtie2 -x phix_db/PhiX_bowtie_db -f -U *merged.fasta -S merged.bowtie \
+            --un merged.screened --al merged.PhiX --local -p 2
 
 	echo "PhiX screened, generating PhiX accession number file..."
 	grep ">" merged.PhiX >> PhiX.accnos
@@ -276,7 +330,11 @@ groupFormatter(){
 mothurScreen(){
 	# Runs mothur against screening_batch.txt to screen concat'd fasta
 
+	echo "screen.seqs(fasta=merged.pick.fasta, group=merged.pick.groups, minlength=200, maxlength=300, maxambig=0, maxhomop=8)" > screening_batch.txt
+	echo "summary.seqs(fasta=current, processors=20)" >> screening_batch.txt
+	echo "count.groups(group=current)" >> screening_batch.txt
 	./mothur screening_batch.txt
+	rm screening_batch.txt
 }
 #grep -Eo "[A-Z]{3,6}[0-9]{4,6}" ../usda/docs/pdf/Hewavitharana_etal_2019_Temporal_Dynamics_ASD_metabolome.txt
 #https://www.ncbi.nlm.nih.gov/search/all/\?term\=PRJNA561262
@@ -286,7 +344,13 @@ mothurScreen(){
 #https://www.ncbi.nlm.nih.gov/Traces/study/\?query_key\=2\&WebEnv\=NCID_1_91785073_130.14.22.33_5555_1583974610_681314290_0MetA0_S_HStore\&o\=acc_s%3Aa
 
 
-#sraFinder
+# Main
+if [ -f "SRR_Acc_List.txt" ] && [ -f "SraRunTable.txt" ]; then
+	sraFinder
+else
+	echo "asdMetagen: Accession List and Run Table found, continuing..."
+	continue
+fi
 #srrMunch
 #16sExtractor
 #mergeSeqs
