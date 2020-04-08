@@ -118,30 +118,12 @@ srrMunch(){
 			# in case the download glitches and needs to be re-run
 			continue
 		else
-        	#fastq-dump --split-3 --gzip $x
+        		#fastq-dump --split-3 --gzip $x
 			fastq-dump --split-files --gzip $x
 			gzip -d $(basename $x .fastq.gz)*.fastq
 			FORWARD="$(basename $x)*_*1.fastq"
 		fi
 	done < $ACCESSION_LIST
-
-	# Check that each fastq pair have the same read numbers
-	for i in *_*1.fastq; do
-		sufRegex $i
-		READ_NAME=$(basename $i _1.fastq)
-		F_READ_NUM=$(grep -c "@$READ_NAME" $i)
-		R_READ_NUM=$(grep -c "@$READ_NAME" $REV)
-
-		if [ $F_READ_NUM = $R_READ_NUM ]; then
-			echo "asdMetagen: Read counts match"
-			echo "asdMetagen: F Reads: $F_READ_NUM \t R Reads: $R_READ_NUM"
-		else
-			echo "Mismatch found, delete reads and \
-				re-run fastq-dump before proceeding"
-			rm $i $REV && srrMunch $READNAME
-			continue
-		fi
-	done
 
 	shopt -u nullglob
 }
@@ -190,18 +172,9 @@ mergeSeqs(){
 
 	# Merge all _1 & _2 fastqs
 	for i in *1.fastq; do
-		if [[ "$i" =~ "_1.fastq" ]]; then
-			SUF_REGX="s/_1\.fastq/_2.fastq/"
-		elif [[ "$i" =~ "_R1.fastq" ]]; then
-			SUF_REGX="s/_R1\.fastq/_R2.fastq/"
-		else
-			echo "asdMetagen: Error: Expected merge suffices not found" >&2
-			exit 1
-		fi
-		echo "asdMetagen: Suffix Regex: $SUF_REGX"
-		REV=$(echo "$i" | sed $SUF_REGX)
-		READ_NAME=$(basename $i _1.fastq)
-		OUT_FILE=$(echo "$i" | sed -E 's/_\(\|R\)1\.fastq/.merged/')
+		sufRegex $i		
+		READ_NAME=$(basename $i _1.fastq) # genericize to _1 or _R1 later?
+		OUT_FILE=$(echo "$i" | sed 's/_\(\|R\)1\.fastq/.merged/')
 
 		# Make sure the read numbers are identical between forward
 		# 	and reverse
@@ -210,17 +183,21 @@ mergeSeqs(){
 		R_READ_NUM=$(grep -c "@$READ_NAME" $REV)
 
 		if [[ "$F_READ_NUM" == "$R_READ_NUM" ]]; then
-			echo "Read counts match!"
-			echo "F Reads: $F_READ_NUM \t R Reads: $R_READ_NUM"
-			echo "Now merging: $i" "$REV"
-			bbmerge.sh in1="$i" in2="$REV" out="$OUT_FILE".fastq
+			echo "asdMetagen: Read counts match; Now merging: $i" "$REV"
+			echo "asdMetagen: Merge out file: $OUT_FILE"
+			bbmerge.sh in1="$i" in2="$REV" out="$OUT_FILE"
 		else
-			echo "Mismatch found, delete reads and \
+			echo "Mismatch found, delete reads for $READ_NAME and \
 				re-run fastq-dump before proceeding"
 			# rm $i $REV && srrMunch
 			# exit 0
 		fi
 		done
+	
+	# Remove garbage output files
+	for i in merged.*; do
+		[ -s $i ] && echo "Unexpected output, $i is non-zero" || rm $i
+	done
 
 	shopt -u nullglob
 }
@@ -234,15 +211,16 @@ q2aReformat(){
 	# NOTE: RUN AFTER: --- flash2_merge.sh
 	#	RUN BEFORE: -- groupFormatter.sh
 
-	for i in *.merged.fastq; do
-		if [ -z $(type -P reformat.sh) ] && [ -f reformat.sh ]; then
-			COMMAND="./reformat.sh"
-		elif [ ! -z $(type -P reformat.sh) ]; then
-			COMMAND="reformat.sh"
-		fi
+	if [ -z $(type -P reformat.sh) ] && [ -f reformat.sh ]; then
+		COMMAND="./reformat.sh"
+	elif [ ! -z $(type -P reformat.sh) ]; then
+		COMMAND="reformat.sh"
+	fi
+
+	for i in *.merged; do
+		$COMMAND in=$i out=$(basename $i .merged).fasta
 	done
 
-	$COMMAND in=$i out=$(echo "$i" | sed 's/fastq/fasta/')
 }
 
 
@@ -259,6 +237,7 @@ trim_loop(){
 
 
 	# Loop over merged fastas
+	echo "asdMetagen: FORPRIME = $FORPRIME\t REVPRIME = $REVPRIME"
 	for x in *.fasta; do
 		m=$(basename $x .fasta)
 
@@ -345,18 +324,18 @@ mothurScreen(){
 
 
 # Main
-if [ -f "SRR_Acc_List.txt" ] && [ -f "SraRunTable.txt" ]; then
-	sraFinder
+if [ ! -f "SRR_Acc_List.txt" ] && [ ! -f "SraRunTable.txt" ]; then
+	sraFinder	# [WORKING]
 else
 	echo "asdMetagen: Accession List and Run Table found, continuing..."
-	continue
 fi
-#srrMunch
-#16sExtractor
-#mergeSeqs
-#q2aReformat
-#trim_loop
-#phixTrim
-#groupConcat
-#groupFormatter
-#mothurScreen
+
+#srrMunch 	# [BROKEN? fastq-dump READLEN > 1 error]
+#16sExtractor 	# [WORKING]
+#mergeSeqs 	# [WORKING]
+#q2aReformat 	# [WORKING]
+trim_loop	# [BROKEN? Most, but not all, reads tossed by cutadapt]
+#phixTrim	# []
+#groupConcat	# []
+#groupFormatter	# []
+#mothurScreen	# []
