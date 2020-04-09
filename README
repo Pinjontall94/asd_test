@@ -14,43 +14,43 @@ for arbitrary sequences is a high priority going forward!)
 --------------------------
 
 1. Extract relevant SRA # from study PDF's
-	-- script: sraFinder.sh
+	-- function: sraFinder
 
 2. Search online for SRA run table and metadata
-	-- script: TBD
+	-- function: TBD
 	-- [WORKAROUND]: type "!ncbi SRA<result from pdfshot.sh>" into DuckDuckGo
 
 3. Use fastq-dump from SRA-toolkit to download the fastqs
-	-- script: srr_munch.sh
+	-- function: srr_munch
 
 4. Filter fastqs to isolate the 16S V4 sequences
-	-- script: 16S_extractor.sh
+	-- function: 16S_extractor
 
 5. Merge forward and reverse fastqs
-	-- script: flash2_merge.sh
+	-- function: flash2_merge
 
 6. Convert fastqs to fastas with bbtools "reformat"
-	-- script: q2a_reformat.sh
+	-- function: q2a_reformat
 
 7. Remove primers with cutadapt
-	-- script: primer_trim.sh [VERIFY]
+	-- function: primer_trim [VERIFY]
 
 8. Screen for PhiX (as needed)
-	-- script: phix.sh
+	-- function: phix
 	-- (Relevant Info): ASD_metaanal_screening_fasta.txt
 
 9. Concatenate fastas 
-	-- script: group_concat.sh [VERIFY]
+	-- function: groupConcat [VERIFY]
 
 10. Make group file for mothur
-	-- script: groupFormatter.sh
+	-- function: groupFormatter
 
 11. Make summary with mothur for combined fasta file
-	-- script: ./mothur TBD
+	-- function: ./mothur TBD
 	-- (Relevant Info): ASD_metaanal_screening_fasta.txt
 
 12. Screen Sequences with mothur
-	-- script: ./mothur screening_batch.txt
+	-- function: ./mothur screening_batch.txt
 	-- (Relevant Info): ASD_metaanal_screening_fasta.txt
 
 
