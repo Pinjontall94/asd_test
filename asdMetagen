@@ -13,7 +13,7 @@ ACCESSION_LIST=SRR_Acc_List.txt
 FORPRIME=$1
 REVPRIME=$2
 
-# Set available threads 
+# Set available threads (default: uses all but 2 available threads)
 THREADS=${3:-$(( $(nproc) - 2 ))}
 
 # Define use flags
@@ -152,14 +152,15 @@ srrMunch(){
 
 	mkdir 16S_temp filter
 	if [ -f $RUNTABLE ]; then
-		# create list of 16S seqs from the runtable
+		# Create list of 16S seqs from the runtable
 		awk -F "," '/16S/ { print $1 }' $RUNTABLE > 16S_list.txt.temp
 		while read line; do
-			echo "$line.fastq"
-			eval mv $line*.fastq 16S_temp # move 16S seqs to temp dir
+			#echo "$line.fastq"
+			eval mv $line*.fastq 16S_temp # Move 16S seqs to temp dir
 		done < 16S_list.txt.temp
 		rm 16S_list.txt.temp
-		mv *.fastq filter	# move the non-match seqs to the filter
+		# Move the non-match seqs to the filter, or remove filter if all seqs match
+		[[ -z $(ls | grep "\.fastq") ]] && rmdir filter || mv *.fastq filter
 		mv 16S_temp/* . && rmdir 16S_temp
 	else
 		echo "No SraRunTable.txt found! Try grep -B 1 -E \"<FORWARD PRIMER>\" on fastqs"
@@ -254,9 +255,20 @@ trimLoop(){
 
 	echo asdMetagen: Trimming primers...
 
-	# Load cutadapt if necessary
-	if [ -z $(type -P cutadapt) ]; then
-	    module load cutadapt/2.0 # comment out when on local machine!
+	# Test shell for cutadapt path tester
+	if [[ ${SHELL/*bin} == "/zsh" ]]; then
+		PATH_TESTER=whence
+	elif [[ ${SHELL/*bin} == "/bash" ]]; then
+		PATH_TESTER=type
+	else
+		echo asdMetagen: Error: Incompatible shell detected
+		exit 1
+	fi
+
+
+	# Test if cutadapt is in PATH, and load if necessary
+	if [ -z $($PATH_TESTER -p) ]; then
+		module load cutadapt/2.0
 	else
 	    echo asdMetagen: cutadapt not found in PATH or module list && exit 1
 	fi
@@ -266,10 +278,8 @@ trimLoop(){
 	echo asdMetagen: FORPRIME = "$FORPRIME"\\t REVPRIME = "$REVPRIME"
 	for x in *.merged.fasta; do
 		m=$(basename $x .fasta)
-
 		cutadapt -g $FORPRIME -o $m.temp.fasta $x --discard-untrimmed
 		cutadapt -a $REVPRIME -o $m.trimmed.fasta $m.temp.fasta --discard-untrimmed
-
 	done
 }
 
@@ -285,8 +295,11 @@ phixScreen(){
 
 	echo asdMetagen: Screening for PhiX contamination
 
-	bowtie2 -x phix_db/PhiX_bowtie_db -f -U *trimmed.fasta -S merged.bowtie \
-		--un merged.screened --al merged.PhiX --local -p $THREADS
+	for i in *.trimmed.fasta; do
+		bowtie2 -f "$i" -x phix_db/PhiX_bowtie_db \
+			-S merged.bowtie --un merged.screened --al merged.PhiX \
+			--local -p $THREADS
+		done
 
 	echo asdMetagen: Screening complete, generating PhiX accession number file...
 	grep ">" merged.PhiX >> PhiX.accnos
@@ -298,6 +311,11 @@ phixScreen(){
 	#else echo "No PhiX detected, renaming merged.fasta for pipeline compatibility"
 	#     mv merged.fasta clean.merged.fasta
 	#fi
+
+	# Remove zero-length report files
+	for i in merged.*; do
+		[[ -s $i ]] || rm $i
+	done
 }
 
 
@@ -306,7 +324,6 @@ groupConcat(){
 	# Concat all *trimmed*fasta files in current directory
 
 	for x in *trimmed*; do
-		#echo "Dry run of cat $x to $(basename $x | sed 's/_.*$//').trimmed.concat.fasta"
 		cat $x >> $(basename $x | sed 's/_.*$//').trimmed.concat.fasta
 	done
 }
@@ -341,6 +358,12 @@ mothurScreen(){
 	echo "count.groups(group=current)" >> screening_batch.txt
 	./mothur screening_batch.txt
 	rm screening_batch.txt
+
+	# Remove PhiX contamination [Maybe shift to before main screening?]
+	if [ -s PhiX.accnos ]; then
+		echo "remove.seqs(fasta=merged.screened.fasta, group=merged.groups, accnos=PhiX.accnos)" >> phix_batch.txt
+		./mothur phix_batch.txt
+	fi
 }
 
 #grep -Eo "[A-Z]{3,6}[0-9]{4,6}" ../usda/docs/pdf/Hewavitharana_etal_2019_Temporal_Dynamics_ASD_metabolome.txt
@@ -358,14 +381,12 @@ else
 	echo "asdMetagen: Accession List and Run Table found, continuing..."
 fi
 
-#srrMunch 	# [BROKEN? fastq-dump READLEN > 1 error]
+#srrMunch 	# [WORKING]
 #16sExtractor 	# [WORKING]
 #mergeSeqs 	# [WORKING]
 #q2aReformat 	# [WORKING]
 #trimLoop	# [WORKING]
-#phixScreen	# []
-#groupConcat	# []
+#phixScreen	# [WORKING]
+groupConcat	# []
 #groupFormatter	# []
 #mothurScreen	# []
-
-echo $THREADS
