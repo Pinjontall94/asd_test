@@ -376,7 +376,7 @@ groupFormatter(){
 
 	tr "\n" "-" < groups.temp > group_paren.txt
 	rm groups.temp
-	echo "make.group($(cat group_paren.txt))" | sed s/-\)$/\)/ > group_batch.txt
+	echo "make.group(fasta=$(cat group_paren.txt))" | sed s/-\)$/\)/ > group_batch.txt
 	./mothur group_batch.txt
 }
 
