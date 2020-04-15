@@ -13,6 +13,9 @@ ACCESSION_LIST=SRR_Acc_List.txt
 FORPRIME=$1
 REVPRIME=$2
 
+# Set author (from current directory)
+AUTHOR=${PWD##*/}
+
 # Set available threads (default: uses all but 2 available threads)
 THREADS=${3:-$(( $(nproc) - 2 ))}
 
@@ -277,7 +280,7 @@ trimLoop(){
 	# Loop over merged fastas
 	echo asdMetagen: FORPRIME = "$FORPRIME"\\t REVPRIME = "$REVPRIME"
 	for x in *.merged.fasta; do
-		m=$(basename $x .fasta)
+		m=${x%.fasta}
 		cutadapt -g $FORPRIME -o $m.temp.fasta $x --discard-untrimmed
 		cutadapt -a $REVPRIME -o $m.trimmed.fasta $m.temp.fasta --discard-untrimmed
 	done
@@ -295,14 +298,45 @@ phixScreen(){
 
 	echo asdMetagen: Screening for PhiX contamination
 
-	for i in *.trimmed.fasta; do
-		bowtie2 -f "$i" -x phix_db/PhiX_bowtie_db \
-			-S merged.bowtie --un merged.screened --al merged.PhiX \
-			--local -p $THREADS
+	# [Looks like we can get bowtie2 to do the concat?]
+	perFasta(){
+		for i in *.trimmed.fasta; do
+			bowtie2 -f $i -x phix_db/PhiX_bowtie_db \
+				-S ${i%%.*}.merged.bowtie --un ${i/trimmed/trimmed.screened} \
+				--al ${i%%.*}.merged.PhiX \
+				--local -p $THREADS
+			
+			# Remove zero-length report files
+			for x in *.merged.*; do
+				[[ -s $i ]] || rm $i
+			done
 		done
+	}
+	
+	bowtieConcat(){
+		bowtie2 -f *.trimmed.fasta -x phix_db/PhiX_bowtie_db \
+				-S merged.bowtie \
+				--un $AUTHOR.merged.trimmed.screened.concat.fasta \
+				--al merged.PhiX \
+				--local -p $THREADS
 
-	echo asdMetagen: Screening complete, generating PhiX accession number file...
-	grep ">" merged.PhiX >> PhiX.accnos
+		# Remove zero-length report files
+		for i in *merged.*; do
+			[[ -s $i ]] || rm $i
+		done
+	}
+	
+	# Screen concat'd fasta (or maybe screen AND concat?)
+	#bowtieConcat
+
+	# Alternatively, concat individual merged fastas
+	perFasta
+
+	# Once complete, generate list of reads to be screened out
+	[[ ! -f *.screened*fasta ]] && exit 1 || \
+		echo asdMetagen: Screening complete, \
+		generating PhiX accession number file...
+	grep ">" *merged.PhiX >> PhiX.accnos
 
 	#if [ -s PhiX.accnos ]; then
 	#    while IFS= ; do read line
@@ -312,11 +346,7 @@ phixScreen(){
 	#     mv merged.fasta clean.merged.fasta
 	#fi
 
-	# Remove zero-length report files
-	for i in merged.*; do
-		[[ -s $i ]] || rm $i
-	done
-}
+	}
 
 
 groupConcat(){
@@ -324,7 +354,8 @@ groupConcat(){
 	# Concat all *trimmed*fasta files in current directory
 
 	for x in *trimmed*; do
-		cat $x >> $(basename $x | sed 's/_.*$//').trimmed.concat.fasta
+		# Concat to fasta designated with authors name (from PWD)
+		cat $x >> $AUTHOR.trimmed.concat.fasta
 	done
 }
 
@@ -363,6 +394,7 @@ mothurScreen(){
 	if [ -s PhiX.accnos ]; then
 		echo "remove.seqs(fasta=merged.screened.fasta, group=merged.groups, accnos=PhiX.accnos)" >> phix_batch.txt
 		./mothur phix_batch.txt
+		rm phix_batch.txt
 	fi
 }
 
@@ -385,8 +417,8 @@ fi
 #16sExtractor 	# [WORKING]
 #mergeSeqs 	# [WORKING]
 #q2aReformat 	# [WORKING]
+groupFormatter	# [] [New Position; was after phix, before groupConcat]
 #trimLoop	# [WORKING]
 #phixScreen	# [WORKING]
-groupConcat	# []
-#groupFormatter	# []
+#groupConcat	# []
 #mothurScreen	# []
