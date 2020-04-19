@@ -23,8 +23,8 @@ THREADS=${3:-$(( $(nproc) - 2 ))}
 while getopts "h" FLAGS; do
 	case $FLAGS in
 		h)
-			echo Usage: asdMetagen \[ forward primer \] \
-				\[ reverse-compliment of reverse primer \]
+			echo "Usage: asdMetagen \[ forward primer \]" \
+				"\[ reverse-compliment of reverse primer \]"
 			exit;;
 	esac
 done
@@ -98,11 +98,11 @@ sufRegex(){
 
 	if [[ "$1" =~ "_1.fastq" ]]; then
 		#SUF_REGX="s/_1\.fastq/_2.fastq/"
-		REV=${1/_1.fastq/_2.fastq}
+		REV=${1//_1.fastq/_2.fastq}
 		#MERGE_ABBREV=""
 	elif [[ "$1" =~ "_R1.fastq" ]]; then
 		#SUF_REGX="s/_R1\.fastq/_R2.fastq/"
-		REV=${1/_R1.fastq/_R2.fastq}
+		REV=${1//_R1.fastq/_R2.fastq}
 		#MERGE_ABBREV="R"
 	else
 		echo "asdMetagen: Error: Expected merge suffices not found" >&2
@@ -117,8 +117,8 @@ srrMunch(){
 	# 	nicely formatting them with bbtools' reformat.sh (for now, with manual
 	#	read number relabeling).
 
-	echo asdMetagen: Looping through $ACCESSION_LIST with sratoolkit and \
-		unpacking fastqs...
+	echo "asdMetagen: Looping through $ACCESSION_LIST with sratoolkit and "\
+		"unpacking fastqs..."
 
 	shopt -s nullglob
 
@@ -127,9 +127,10 @@ srrMunch(){
 	if [[ $SRATOOLKIT_VERSION == "2.10.4" ]]; then
 		SPLIT_OPT="--split-e"
 	else
-		echo asdMetagen: toolkit ver $SRATOOLKIT_VERSION
+		echo "asdMetagen: toolkit ver $SRATOOLKIT_VERSION"
 		SPLIT_OPT="--split-3"
-		echo asdMetagen: attempting fastq-dump with $SPLIT_OPT option...
+		echo "asdMetagen: attempting fastq-dump with "\
+			"$SPLIT_OPT option..."
 	fi
 
 	while read x; do
@@ -151,7 +152,7 @@ srrMunch(){
 	# Description: takes an SraRunTable file from NCBI and outputs all
 	# 		SRR's that contain "16S"
 
-	echo asdMetagen: Filtering out non-16S fastqs by runtable metadata...
+	echo "asdMetagen: Filtering out non-16S fastqs by runtable metadata..."
 
 	mkdir 16S_temp filter
 	if [ -f $RUNTABLE ]; then
@@ -191,8 +192,8 @@ mergeSeqs(){
 
 	shopt -s nullglob
 
-	echo asdMetagen: Checking forward and reverse fastq read counts prior \
-		to merging
+	echo "asdMetagen: Checking forward and reverse fastq read counts "\
+		"prior to merging"
 
 	# Merge all _1 & _2 fastqs
 	for i in *1.fastq; do
@@ -203,17 +204,18 @@ mergeSeqs(){
 		# Make sure the read numbers are identical between forward
 		# 	and reverse
 		# [Clean this up, just check the first few times for efficiency]
-		echo Checking: "$i" "$REV"
+		echo "Checking: $i $REV"
 		F_READ_NUM=$(grep -c "@$READ_NAME" $i)
 		R_READ_NUM=$(grep -c "@$READ_NAME" $REV)
 
 		if [[ "$F_READ_NUM" == "$R_READ_NUM" ]]; then
-			echo asdMetagen: Read counts match\; Now merging: "$i" and "$REV"
-			echo asdMetagen: Merge out file: "$OUT_FILE"
+			echo "asdMetagen: Read counts match; "\
+				"Now merging: $i and $REV"
+			echo "asdMetagen: Merge out file: $OUT_FILE"
 			bbmerge.sh in1="$i" in2="$REV" out="$OUT_FILE"
 		else
-			echo Mismatch found, delete reads for "$READ_NAME" and \
-				re-run fastq-dump before proceeding
+			echo "Mismatch found, delete reads for $READ_NAME and "\
+				"re-run fastq-dump before proceeding"
 			# rm $i $REV && srrMunch
 			exit 0
 		fi
@@ -236,7 +238,7 @@ q2aReformat(){
 	# NOTE: RUN AFTER: --- flash2_merge.sh
 	#	RUN BEFORE: -- groupFormatter.sh
 
-	echo asdMetagen: Reformatting merged fastqs files to fasta format...
+	echo "asdMetagen: Reformatting merged fastqs files to fasta format..."
 
 	if [ -z $(type -P reformat.sh) ] && [ -f reformat.sh ]; then
 		COMMAND="./reformat.sh"
@@ -256,7 +258,7 @@ trimLoop(){
 	# inputs to cutadapt, and loops through all fasta # files in $(pwd)
 
 
-	echo asdMetagen: Trimming primers...
+	echo "asdMetagen: Trimming primers..."
 
 	# Test shell for cutadapt path tester
 	if [[ ${SHELL/*bin} == "/zsh" ]]; then
@@ -264,7 +266,7 @@ trimLoop(){
 	elif [[ ${SHELL/*bin} == "/bash" ]]; then
 		PATH_TESTER=type
 	else
-		echo asdMetagen: Error: Incompatible shell detected
+		echo "asdMetagen: Error: Incompatible shell detected"
 		exit 1
 	fi
 
@@ -273,12 +275,13 @@ trimLoop(){
 	if [ -z $($PATH_TESTER -p) ]; then
 		module load cutadapt/2.0
 	else
-	    echo asdMetagen: cutadapt not found in PATH or module list && exit 1
+	    echo "asdMetagen: cutadapt not found in PATH or module list"
+	    exit 1
 	fi
 
 
 	# Loop over merged fastas
-	echo asdMetagen: FORPRIME = "$FORPRIME"\\t REVPRIME = "$REVPRIME"
+	echo "asdMetagen: FORPRIME = $FORPRIME\tREVPRIME = $REVPRIME"
 	for x in *.merged.fasta; do
 		m=${x%.fasta}
 		cutadapt -g $FORPRIME -o $m.temp.fasta $x --discard-untrimmed
@@ -296,46 +299,25 @@ phixScreen(){
 	#	RUN BEFORE: -- mothur > ~/code/shell/bioinf/phix_removal_batch.txt
 
 
-	echo asdMetagen: Screening for PhiX contamination
+	echo "asdMetagen: Screening for PhiX contamination"
 
-	# [Looks like we can get bowtie2 to do the concat?]
-	perFasta(){
-		for i in *.trimmed.fasta; do
-			bowtie2 -f $i -x phix_db/PhiX_bowtie_db \
-				-S ${i%%.*}.merged.bowtie --un ${i/trimmed/trimmed.screened} \
-				--al ${i%%.*}.merged.PhiX \
-				--local -p $THREADS
-			
-			# Remove zero-length report files
-			for x in *.merged.*; do
-				[[ -s $i ]] || rm $i
-			done
-		done
-	}
-	
-	bowtieConcat(){
-		bowtie2 -f *.trimmed.fasta -x phix_db/PhiX_bowtie_db \
-				-S merged.bowtie \
-				--un $AUTHOR.merged.trimmed.screened.concat.fasta \
-				--al merged.PhiX \
-				--local -p $THREADS
-
+	for i in *.trimmed.fasta; do
+		bowtie2 -f $i -x phix_db/PhiX_bowtie_db \
+			-S ${i%%.*}.merged.bowtie \
+			--un ${i//trimmed/trimmed.screened} \
+			--al ${i%%.*}.merged.PhiX \
+			--local -p $THREADS
+		
 		# Remove zero-length report files
-		for i in *merged.*; do
+		for x in *.merged.*; do
 			[[ -s $i ]] || rm $i
 		done
-	}
-	
-	# Screen concat'd fasta (or maybe screen AND concat?)
-	#bowtieConcat
-
-	# Alternatively, concat individual merged fastas
-	perFasta
+	done
 
 	# Once complete, generate list of reads to be screened out
 	[[ ! -f *.screened*fasta ]] && exit 1 || \
-		echo asdMetagen: Screening complete, \
-		generating PhiX accession number file...
+		echo "asdMetagen: Screening complete, "\
+		"generating PhiX accession number file..."
 	grep ">" *merged.PhiX >> PhiX.accnos
 
 	#if [ -s PhiX.accnos ]; then
@@ -370,30 +352,59 @@ groupFormatter(){
 
 	# Ex: mothur > make.group(fasta=sample1.fasta-sample2.fasta-sample3.fasta, groups=A-B-C)
 
-	for i in *.fasta; do
-		echo "$i" >> groups.temp
+	# Subfunction to join arguments with a given separator
+	joinBy(){
+		OIFS=$IFS
+		IFS=$1
+	
+		shift
+		echo "$*"
+	
+		IFS=$OIFS
+	}
+	
+	# Initialize arrays
+	fastas=()
+	groups=()
+	
+	# Add fastas to array
+	for i in *.merged.fasta; do
+		echo "Adding $i to fastas array"
+		fastas+=("$i")
+		echo "Adding $AUTHOR\_$i to groups array"
+		groups+=("$AUTHOR"_"${i%%.*}")
 	done
+	
+	for i in ${fastas[*]}; do
+		echo "$i"
+	done
+	
+	NAMES=$(joinBy - ${fastas[*]})
+	GROUP_NAMES=$(joinBy - ${groups[*]})
 
-	tr "\n" "-" < groups.temp > group_paren.txt
-	rm groups.temp
-	echo "make.group(fasta=$(cat group_paren.txt))" | sed s/-\)$/\)/ > group_batch.txt
-	./mothur group_batch.txt
+	echo "make.group(fasta=$NAMES, groups=$GROUP_NAMES)" > group_batch.temp.txt
+		
+	./mothur group_batch.temp.txt && rm group_batch.temp.txt
 }
 
 
 mothurScreen(){
 	# Runs mothur against screening_batch.txt to screen concat'd fasta
 
-	echo "screen.seqs(fasta=merged.pick.fasta, group=merged.pick.groups, minlength=200, maxlength=300, maxambig=0, maxhomop=8)" > screening_batch.txt
-	echo "summary.seqs(fasta=current, processors=20)" >> screening_batch.txt
+	echo "screen.seqs(fasta=merged.pick.fasta, group=merged.pick.groups, "\
+		"minlength=200, maxlength=300, maxambig=0, maxhomop=8)" \
+		> screening_batch.txt
+	echo "summary.seqs(fasta=current, processors=$THREADS)" \
+		>> screening_batch.txt
 	echo "count.groups(group=current)" >> screening_batch.txt
-	./mothur screening_batch.txt
-	rm screening_batch.txt
+	./mothur screening_batch.txt && rm screening_batch.txt
 
 	# Remove PhiX contamination [Maybe shift to before main screening?]
 	if [ -s PhiX.accnos ]; then
-		echo "remove.seqs(fasta=merged.screened.fasta, group=merged.groups, accnos=PhiX.accnos)" >> phix_batch.txt
-		./mothur phix_batch.txt
+		echo "remove.seqs(fasta=merged.screened.fasta, "\
+			"group=merged.groups, accnos=PhiX.accnos)" \
+			>> phix_batch.txt
+		./mothur phix_batch.txt && \
 		rm phix_batch.txt
 	fi
 }
@@ -417,7 +428,7 @@ fi
 #16sExtractor 	# [WORKING]
 #mergeSeqs 	# [WORKING]
 #q2aReformat 	# [WORKING]
-groupFormatter	# [] [New Position; was after phix, before groupConcat]
+groupFormatter	# [WORKING] [New Position; was after phix, before groupConcat]
 #trimLoop	# [WORKING]
 #phixScreen	# [WORKING]
 #groupConcat	# []
