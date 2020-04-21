@@ -29,6 +29,10 @@ while getopts "h" FLAGS; do
 	esac
 done
 
+# Initialize arrays
+	fasta_array=()
+	group_array=()
+	
 nucRegex(){
 	# Convert degenerate bases to regex patterns
 
@@ -52,27 +56,32 @@ sraFinder(){
 	# Simple grep parser for all NCBI SRA accession numbers in pdf files in the working directory
 	# usage: <sraFinder.sh>
 
-	shopt -s nullglob
-	for f in *.pdf; do
-		pdftotext $f # convert pdf files to parsable txt files
-		r=$(basename $f .pdf).txt
-		if [[ ! -z $(grep -Eo "[A-Z]{3,}[[:digit:]]{5,}" $r) ]]; then
-			cat $r | grep -Eo "[A-Z]{3,}[[:digit:]]{5,}" $r > \
-				$(echo $r | sed 's/\.txt//').sra
-			# echo anything in txt that has =>3 capitals, followed
-			# 	by => 5 numbers, into a new file with a ".sra"
-			# 	extension (regex: [A-Z]{3,}[[:digit:]]{5,} )
-		else
-			echo "No valid accession number found in file: $f"
-		fi
+	if [ ! -f "SRR_Acc_List.txt" ] && [ ! -f "SraRunTable.txt" ]; then
+		shopt -s nullglob
+		for f in *.pdf; do
+			pdftotext $f # convert pdf files to parsable txt files
+			r=$(basename $f .pdf).txt
+			if [[ ! -z $(grep -Eo "[A-Z]{3,}[[:digit:]]{5,}" $r) ]]; then
+				cat $r | grep -Eo "[A-Z]{3,}[[:digit:]]{5,}" $r > \
+					$(echo $r | sed 's/\.txt//').sra
+				# echo anything in txt that has =>3 capitals, followed
+				# 	by => 5 numbers, into a new file with a ".sra"
+				# 	extension (regex: [A-Z]{3,}[[:digit:]]{5,} )
+			else
+				echo "No valid accession number found in file: $f"
+			fi
+	
+			# Make primers file for screening [WORK IN PROGRESS]
+			#grep -i -P -A 1 "[0-9]{3}f" > $(basename -- $f .pdf)_primers.txt
+			#grep -i -P -A 1 "[0-9]{3}r" >> $(basename -- $f .pdf)_primers.txt
+			rm $r
+		done
+	
+		shopt -u nullglob
+	else
+		echo "asdMetagen: Accession List and Run Table found, continuing..."
+fi
 
-		# Make primers file for screening [WORK IN PROGRESS]
-		#grep -i -P -A 1 "[0-9]{3}f" > $(basename -- $f .pdf)_primers.txt
-		#grep -i -P -A 1 "[0-9]{3}r" >> $(basename -- $f .pdf)_primers.txt
-		rm $r
-	done
-
-	shopt -u nullglob
 }
 
 # TO DO
@@ -96,14 +105,13 @@ sufRegex(){
 	# 	and returns suffic regex and the name
 	# 	of the reverse read
 
+	# [Maybe just change incoming "_R1" to "_1" so we don't have to deal
+	# 	with it in the first place]
+
 	if [[ "$1" =~ "_1.fastq" ]]; then
-		#SUF_REGX="s/_1\.fastq/_2.fastq/"
 		REV=${1//_1.fastq/_2.fastq}
-		#MERGE_ABBREV=""
 	elif [[ "$1" =~ "_R1.fastq" ]]; then
-		#SUF_REGX="s/_R1\.fastq/_R2.fastq/"
 		REV=${1//_R1.fastq/_R2.fastq}
-		#MERGE_ABBREV="R"
 	else
 		echo "asdMetagen: Error: Expected merge suffices not found" >&2
 		exit 1
@@ -253,10 +261,68 @@ q2aReformat(){
 }
 
 
+joinBy(){
+# Helper function to join arguments with a given separator
+
+	OIFS=$IFS
+	IFS=$1
+
+	shift
+	echo "$*"
+
+	IFS=$OIFS
+}
+	
+
+batchArrayadder(){
+# Add fastas to array
+
+	for i in $1; do
+		echo "Adding $i to fastas array"
+		fasta_array+=("$i")
+		echo "Adding $AUTHOR\_${i%%.*} to groups array"
+		group_array+=("$AUTHOR"_"${i%%.*}")
+	done
+}
+
+
+groupFormatter(){
+	# Description: Scans current directory for .fasta files, and
+	#              formats them for use with the R package Mothur's
+	#              'make.group()' command
+
+	# NOTE: RUN AFTER: --- q2a_reformat.sh
+	# 	RUN BEFORE: -- [mothur merge script]
+
+	# Ex: mothur > make.group(fasta=sample1.fasta-sample2.fasta-sample3.fasta, groups=A-B-C)
+
+	OUT_FILE=$AUTHOR.groups
+	for i in ${fasta_array[*]}; do
+		echo "$i"
+	done
+	
+	batchArrayadder "*.merged.fasta"	
+	FORMATTER_FASTAS=$(joinBy - ${fasta_array[*]})
+	FORMATTER_GROUPS=$(joinBy - ${group_array[*]})
+
+	echo "make.group(fasta=$FORMATTER_FASTAS, groups=$FORMATTER_GROUPS)" \
+		> group_batch.temp.txt
+		
+	./mothur group_batch.temp.txt && rm group_batch.temp.txt
+
+	# Rename output file to reflect author
+	# 	(rather than the last group name, per mothur's default)
+	echo "asdMetagen: renaming Output File -> $AUTHOR.groups"
+	mv *merged.groups $AUTHOR.groups
+	
+	unset fasta_array
+	unset group_array
+}
+
+
 trimLoop(){
 	# Takes the primer patterns from command line,
 	# inputs to cutadapt, and loops through all fasta # files in $(pwd)
-
 
 	echo "asdMetagen: Trimming primers..."
 
@@ -270,7 +336,6 @@ trimLoop(){
 		exit 1
 	fi
 
-
 	# Test if cutadapt is in PATH, and load if necessary
 	if [ -z $($PATH_TESTER -p) ]; then
 		module load cutadapt/2.0
@@ -278,7 +343,6 @@ trimLoop(){
 	    echo "asdMetagen: cutadapt not found in PATH or module list"
 	    exit 1
 	fi
-
 
 	# Loop over merged fastas
 	echo "asdMetagen: FORPRIME = $FORPRIME\tREVPRIME = $REVPRIME"
@@ -297,7 +361,6 @@ phixScreen(){
 	# Deps: bowtie2
 	# Note: RUN AFTER: --- mothur > ~/code/shell/bioinf/screening_batch.txt
 	#	RUN BEFORE: -- mothur > ~/code/shell/bioinf/phix_removal_batch.txt
-
 
 	echo "asdMetagen: Screening for PhiX contamination"
 
@@ -342,71 +405,37 @@ groupConcat(){
 }
 
 
-groupFormatter(){
-	# Description: Scans current directory for .fasta files, and
-	#              formats them for use with the R package Mothur's
-	#              'make.group()' command
-
-	# NOTE: RUN AFTER: --- q2a_reformat.sh
-	# 	RUN BEFORE: -- [mothur merge script]
-
-	# Ex: mothur > make.group(fasta=sample1.fasta-sample2.fasta-sample3.fasta, groups=A-B-C)
-
-	# Subfunction to join arguments with a given separator
-	joinBy(){
-		OIFS=$IFS
-		IFS=$1
-	
-		shift
-		echo "$*"
-	
-		IFS=$OIFS
-	}
-	
-	# Initialize arrays
-	fastas=()
-	groups=()
-	
-	# Add fastas to array
-	for i in *.merged.fasta; do
-		echo "Adding $i to fastas array"
-		fastas+=("$i")
-		echo "Adding $AUTHOR\_$i to groups array"
-		groups+=("$AUTHOR"_"${i%%.*}")
-	done
-	
-	for i in ${fastas[*]}; do
-		echo "$i"
-	done
-	
-	NAMES=$(joinBy - ${fastas[*]})
-	GROUP_NAMES=$(joinBy - ${groups[*]})
-
-	echo "make.group(fasta=$NAMES, groups=$GROUP_NAMES)" > group_batch.temp.txt
-		
-	./mothur group_batch.temp.txt && rm group_batch.temp.txt
-}
-
-
 mothurScreen(){
 	# Runs mothur against screening_batch.txt to screen concat'd fasta
 
-	echo "screen.seqs(fasta=merged.pick.fasta, group=merged.pick.groups, "\
+	SCREEN_FASTA=$AUTHOR.trimmed.concat.fasta
+	SCREEN_GROUPS=$AUTHOR.groups
+
+	# Remove PhiX contamination
+	if [ -s PhiX.accnos ]; then
+		echo "remove.seqs(fasta=$SCREEN_FASTA, "\
+			"group=$AUTHOR.groups, "\	# Not needed by mothur?
+			"accnos=PhiX.accnos)" \
+			>> phix_batch.txt
+		./mothur phix_batch.txt && \
+		rm phix_batch.txt
+	else
+		echo "asdMetagen: PhiX.accnos is empty, skipping..."
+	fi
+
+	# Create screening_batch.txt
+	
+	echo "screen.seqs(fasta=$SCREEN_FASTA, group=$SCREEN_GROUPS, "\
 		"minlength=200, maxlength=300, maxambig=0, maxhomop=8)" \
 		> screening_batch.txt
 	echo "summary.seqs(fasta=current, processors=$THREADS)" \
 		>> screening_batch.txt
 	echo "count.groups(group=current)" >> screening_batch.txt
-	./mothur screening_batch.txt && rm screening_batch.txt
 
-	# Remove PhiX contamination [Maybe shift to before main screening?]
-	if [ -s PhiX.accnos ]; then
-		echo "remove.seqs(fasta=merged.screened.fasta, "\
-			"group=merged.groups, accnos=PhiX.accnos)" \
-			>> phix_batch.txt
-		./mothur phix_batch.txt && \
-		rm phix_batch.txt
-	fi
+	echo "asdMetagen: Dry-run of mothurScreen"
+	echo "asdMetagen: cat'ing screening_batch.txt" 
+	cat screening_batch.txt
+	./mothur screening_batch.txt && rm screening_batch.txt
 }
 
 #grep -Eo "[A-Z]{3,6}[0-9]{4,6}" ../usda/docs/pdf/Hewavitharana_etal_2019_Temporal_Dynamics_ASD_metabolome.txt
@@ -428,8 +457,8 @@ fi
 #16sExtractor 	# [WORKING]
 #mergeSeqs 	# [WORKING]
 #q2aReformat 	# [WORKING]
-groupFormatter	# [WORKING] [New Position; was after phix, before groupConcat]
+#groupFormatter	# [WORKING] [New Position; was after phix, before groupConcat]
 #trimLoop	# [WORKING]
 #phixScreen	# [WORKING]
-#groupConcat	# []
-#mothurScreen	# []
+#groupConcat	# [WORKING]
+mothurScreen	# [WORKING]
