@@ -132,7 +132,7 @@ srrMunch(){
 	# INPUTS: fastq-dump(), $ACCESSION_LIST
 	# OUTPUTS: *.fastq
 
-	echo "asdMetagen: Looping through $ACCESSION_LIST with sratoolkit and "\
+	echo "asdMetagen: Looping through $ACCESSION_LIST with sratoolkit and " \
 		"unpacking fastqs..."
 
 	shopt -s nullglob
@@ -402,22 +402,16 @@ phixScreen(){
 			--un ${i//trimmed/trimmed.screened} \
 			--al ${i%%.*}.merged.PhiX \
 			--local -p $THREADS
-		
-		# Remove zero-length report files
-		for x in *.merged.*; do
-			[[ -s $i ]] || rm $i
-		done
 	done
 
 	# Once complete, generate list of reads to be screened out
-	if [[ -f *.screened*fasta ]]; then
-		echo "asdMetagen: Screening complete"
-		if [[ -s *.merged.PhiX ]]; then
+	for i in *.merged.PhiX; do
+		if [[ -s $i ]]; then
 			echo "generating PhiX accession number file..."
 
 			# Old grep command, probably won't work on multiple
 			# 	files without generating "<filename>:<accno>"
-			#grep ">" *merged.PhiX >> PhiX.accnos
+			# grep ">" *merged.PhiX >> PhiX.accnos
 
 			# [Do accnos in *.merged.PhiX start with ">"?
 			# 	also, this works with *.merged.PhiX,
@@ -428,11 +422,7 @@ phixScreen(){
 			echo "asdMetagen: All *.merged.PhiX are empty, "\
 				"skipping PhiX.accnos generation"
 		fi
-	else
-		echo "asdMetagen: Error: No *.screened*fasta found!" >&2
-		echo "asdMetagen: Exiting..." >&2
-		exit 1
-	fi
+	done
 
 	#if [ -s PhiX.accnos ]; then
 	#    while IFS= ; do read line
@@ -512,12 +502,12 @@ else
 	echo "asdMetagen: Accession List and Run Table found, continuing..."
 fi
 
-srrMunch && \	
-16sExtractor && \
-mergeSeqs && \
-q2aReformat && \	
-groupFormatter	&& \ # [New Position; was after phix, before groupConcat]
-trimLoop && \	
-phixScreen && \
-groupConcat && \
+srrMunch
+16sExtractor
+mergeSeqs
+q2aReformat
+groupFormatter # [New Position; was after phix, before groupConcat]
+trimLoop
+phixScreen
+groupConcat
 mothurScreen
