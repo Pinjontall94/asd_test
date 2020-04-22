@@ -477,17 +477,14 @@ mothurScreen(){
 pathTester(){
 	# Test if cutadapt is in PATH, and load if necessary
 
-	MODULE_NO_VER=$1
-	MODULE_EXEC=$2
-	if [[ -n $(type -p $MODULE_EXEC) ]]; then
-		echo "asdMetagen: $MODULE_EXEC is in PATH"
-	elif [[ -n $(type -p ./$MODULE_EXEC) ]]; then
-		echo "asdMetagen: WARNING: $MODULE_EXEC is in directory, but not PATH"
+	if [[ -n $(type -p $2) ]]; then
+		echo "asdMetagen: $2 is in PATH"
+	elif [[ -n $(type -p ./$2) ]]; then
+		echo "asdMetagen: WARNING: $2 is in directory, but not PATH"
 	else
-	    	echo "asdMetagen: $MODULE_EXEC not found in PATH, "\
+	    	echo "asdMetagen: $2 not found in PATH, "\
 		    "loading most up-to-date module..."
-		MODULE_TO_LOAD=$(module avail $MODULE_NO_VER \
-			| awk 'END { print $NF }')
+		MODULE_TO_LOAD=$(module avail $1 | awk 'END { print $NF }')
 		echo "asdMetagen: Testing command: module load $MODULE_TO_LOAD"
 		module load "$MODULE_TO_LOAD"
 	    exit 1
