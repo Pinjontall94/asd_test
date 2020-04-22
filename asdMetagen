@@ -354,26 +354,6 @@ trimLoop(){
 	# OUTPUTS: *.trimmed.fasta
 
 	echo "asdMetagen: Trimming primers..."
-
-	# Test shell for cutadapt path tester
-	if [[ ${SHELL/*bin} == "/zsh" ]]; then
-		PATH_TESTER=whence
-	elif [[ ${SHELL/*bin} == "/bash" ]]; then
-		PATH_TESTER=type
-	else
-		echo "asdMetagen: Error: Incompatible shell detected"
-		exit 1
-	fi
-
-	# Test if cutadapt is in PATH, and load if necessary
-	if [ -z $($PATH_TESTER -p) ]; then
-		module load cutadapt/2.0
-	else
-	    echo "asdMetagen: cutadapt not found in PATH or module list"
-	    exit 1
-	fi
-
-	# Loop over merged fastas
 	echo "asdMetagen: FORPRIME = $FORPRIME\tREVPRIME = $REVPRIME"
 	for x in *.merged.fasta; do
 		m=${x%.fasta}
@@ -494,20 +474,43 @@ mothurScreen(){
 #https://www.ncbi.nlm.nih.gov/Traces/study/\?WebEnv\=NCID_1_91785073_130.14.22.33_5555_1583974610_681314290_0MetA0_S_HStore\&query_key\=2
 #https://www.ncbi.nlm.nih.gov/Traces/study/\?query_key\=2\&WebEnv\=NCID_1_91785073_130.14.22.33_5555_1583974610_681314290_0MetA0_S_HStore\&o\=acc_s%3Aa
 
+pathTester(){
+	# Test if cutadapt is in PATH, and load if necessary
+
+	MODULE_NO_VER=$1
+	MODULE_EXEC=$2
+	if [[ -n $(type -p $MODULE_EXEC) ]]; then
+		echo "asdMetagen: $MODULE_EXEC is in PATH"
+	elif [[ -n $(type -p ./$MODULE_EXEC) ]]; then
+		echo "asdMetagen: WARNING: $MODULE_EXEC is in directory, but not PATH"
+	else
+	    	echo "asdMetagen: $MODULE_EXEC not found in PATH, "\
+		    "loading most up-to-date module..."
+		MODULE_TO_LOAD=$(module avail $MODULE_NO_VER | awk 'END { print $NF }')
+		module load "$MODULE_TO_LOAD"
+	    exit 1
+	fi
+}
+
 
 # Main
+
+pathTester cutadapt cutadapt
+pathTester bbmap bbmerge.sh
+pathTester sratoolkit fastq-dump
+pathTester mothur mothur
 if [ ! -f "SRR_Acc_List.txt" ] && [ ! -f "SraRunTable.txt" ]; then
 	sraFinder	# [WORKING]
 else
 	echo "asdMetagen: Accession List and Run Table found, continuing..."
 fi
 
-srrMunch
-16sExtractor
-mergeSeqs
-q2aReformat
-groupFormatter # [New Position; was after phix, before groupConcat]
-trimLoop
-phixScreen
-groupConcat
-mothurScreen
+#srrMunch
+#16sExtractor
+#mergeSeqs
+#q2aReformat
+#groupFormatter # [New Position; was after phix, before groupConcat]
+#trimLoop
+#phixScreen
+#groupConcat
+#mothurScreen
