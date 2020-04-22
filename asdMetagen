@@ -1,9 +1,11 @@
 #!/bin/bash
-# sraFinder.sh
+# asdMetagen -- A bash script to prepare unmerged 16S V4 fastqs for
+#			metagenomic analysis. 
 
 # AUTHOR: Samuel Johnson
 # LICENSE: GNU Affero General Public License https://www.gnu.org/licenses/agpl-3.0.html
-# DEPENDS: poppler-utils, bash
+# DEPENDS: poppler-utils, bash, bbmap, mothur, sratoolkit
+# VERSION: 0.9.0
 
 # Set input files
 RUNTABLE=SraRunTable.txt
@@ -105,6 +107,8 @@ sufRegex(){
 	# 	and returns suffic regex and the name
 	# 	of the reverse read
 
+	# INPUTS: *1.fastq
+	# OUTPUTS: $REV
 	# [Maybe just change incoming "_R1" to "_1" so we don't have to deal
 	# 	with it in the first place]
 
@@ -124,6 +128,9 @@ srrMunch(){
 	# Short script to loop through SRRs in an SRA list, running fastq-dump, and
 	# 	nicely formatting them with bbtools' reformat.sh (for now, with manual
 	#	read number relabeling).
+
+	# INPUTS: fastq-dump(), $ACCESSION_LIST
+	# OUTPUTS: *.fastq
 
 	echo "asdMetagen: Looping through $ACCESSION_LIST with sratoolkit and "\
 		"unpacking fastqs..."
@@ -160,6 +167,9 @@ srrMunch(){
 	# Description: takes an SraRunTable file from NCBI and outputs all
 	# 		SRR's that contain "16S"
 
+	# INPUTS: fastq-dump, $RUNTABLE, *.fastq
+	# OUTPUTS: filter/, *.fastq
+
 	echo "asdMetagen: Filtering out non-16S fastqs by runtable metadata..."
 
 	mkdir 16S_temp filter
@@ -193,6 +203,9 @@ srrMunch(){
 mergeSeqs(){
 	# DESCRIPTION: A simple script that runs bbmerge.sh to merge all fastqs in the current
 	# 	directory.
+
+	# INPUTS: sufRegex(), bbmerge.sh(), *1.fastq
+	# OUTPUTS: *.merged.fastq, merged.*
 
 	# Deps: bbmerge.sh
 	# NOTE: RUN AFTER: --- srr_munch.sh
@@ -241,10 +254,13 @@ mergeSeqs(){
 q2aReformat(){
 	# DESCRIPTION: Reformats all fastq files in current directory to fasta
 
+	# INPUTS: reformat.sh(), *.merged.fastq
+	# OUTPUTS: *.merged.fasta
+
 	# Deps: bbtools 'reformat' tool
 
-	# NOTE: RUN AFTER: --- flash2_merge.sh
-	#	RUN BEFORE: -- groupFormatter.sh
+	# NOTE: RUN AFTER: --- mergeSeqs
+	#	RUN BEFORE: -- groupFormatter
 
 	echo "asdMetagen: Reformatting merged fastqs files to fasta format..."
 
@@ -262,7 +278,10 @@ q2aReformat(){
 
 
 joinBy(){
-# Helper function to join arguments with a given separator
+	# Description: Helper function to join arguments with a given separator
+
+	# INPUTS: $* 
+	# OUTPUTS: $*
 
 	OIFS=$IFS
 	IFS=$1
@@ -275,7 +294,11 @@ joinBy(){
 	
 
 batchArrayadder(){
-# Add fastas to array
+	# Description: Add fastas to array
+
+	# INPUTS: $1, fasta_array, group_array 
+	# OUTPUTS: fasta_array, group_array
+
 
 	for i in $1; do
 		echo "Adding $i to fastas array"
@@ -290,6 +313,9 @@ groupFormatter(){
 	# Description: Scans current directory for .fasta files, and
 	#              formats them for use with the R package Mothur's
 	#              'make.group()' command
+
+	# INPUTS: batchArrayadder(), joinBy(), mothur(), fasta_array, group_array
+	# OUTPUTS: $AUTHOR.groups, mothur.*.logfile
 
 	# NOTE: RUN AFTER: --- q2a_reformat.sh
 	# 	RUN BEFORE: -- [mothur merge script]
@@ -323,6 +349,9 @@ groupFormatter(){
 trimLoop(){
 	# Takes the primer patterns from command line,
 	# inputs to cutadapt, and loops through all fasta # files in $(pwd)
+
+	# INPUTS: cutadapt(), $FORPRIME, $REVPRIME, *.merged.fasta
+	# OUTPUTS: *.trimmed.fasta
 
 	echo "asdMetagen: Trimming primers..."
 
@@ -358,6 +387,9 @@ phixScreen(){
 	# DESCRIPTION: Takes in a fasta file, phix databases in a directory named
 	# 	$PWD/phix_db/ and screens for PhiX contamination
 
+	# INPUTS: bowtie2(), *.trimmed.fasta
+	# OUTPUTS: *.screened.fasta, *.merged.PhiX, *.merged.bowtie
+
 	# Deps: bowtie2
 	# Note: RUN AFTER: --- mothur > ~/code/shell/bioinf/screening_batch.txt
 	#	RUN BEFORE: -- mothur > ~/code/shell/bioinf/phix_removal_batch.txt
@@ -378,10 +410,29 @@ phixScreen(){
 	done
 
 	# Once complete, generate list of reads to be screened out
-	[[ ! -f *.screened*fasta ]] && exit 1 || \
-		echo "asdMetagen: Screening complete, "\
-		"generating PhiX accession number file..."
-	grep ">" *merged.PhiX >> PhiX.accnos
+	if [[ -f *.screened*fasta ]]; then
+		echo "asdMetagen: Screening complete"
+		if [[ -s *.merged.PhiX ]]; then
+			echo "generating PhiX accession number file..."
+
+			# Old grep command, probably won't work on multiple
+			# 	files without generating "<filename>:<accno>"
+			#grep ">" *merged.PhiX >> PhiX.accnos
+
+			# [Do accnos in *.merged.PhiX start with ">"?
+			# 	also, this works with *.merged.PhiX,
+			#	not just a single file "merged.PhiX"
+			grep -Eo "[A-Z]{3,6}[0-9]+\.[0-9]+" *merged.bowtie \
+			| awk -F: '{ print $2 }' >> PhiX.accnos
+		else
+			echo "asdMetagen: All *.merged.PhiX are empty, "\
+				"skipping PhiX.accnos generation"
+		fi
+	else
+		echo "asdMetagen: Error: No *.screened*fasta found!" >&2
+		echo "asdMetagen: Exiting..." >&2
+		exit 1
+	fi
 
 	#if [ -s PhiX.accnos ]; then
 	#    while IFS= ; do read line
@@ -398,7 +449,10 @@ groupConcat(){
 	# group_concat.sh
 	# Concat all *trimmed*fasta files in current directory
 
-	for x in *trimmed*; do
+	# INPUTS: *trimmed*fasta
+	# OUTPUTS: $AUTHOR.trimmed.concat.fasta
+
+	for x in *trimmed*fasta; do
 		# Concat to fasta designated with authors name (from PWD)
 		cat $x >> $AUTHOR.trimmed.concat.fasta
 	done
@@ -407,6 +461,11 @@ groupConcat(){
 
 mothurScreen(){
 	# Runs mothur against screening_batch.txt to screen concat'd fasta
+
+	# INPUTS: mothur(), PhiX.accnos, $AUTHOR.trimmed.concat.fasta,
+	#		$AUTHOR.groups
+	# OUTPUTS: *.good.count.summary, *.good.groups, *.good.fasta, 
+	#		*.good.summary, *.bad.accnos
 
 	SCREEN_FASTA=$AUTHOR.trimmed.concat.fasta
 	SCREEN_GROUPS=$AUTHOR.groups
@@ -453,12 +512,12 @@ else
 	echo "asdMetagen: Accession List and Run Table found, continuing..."
 fi
 
-#srrMunch 	# [WORKING]
-#16sExtractor 	# [WORKING]
-#mergeSeqs 	# [WORKING]
-#q2aReformat 	# [WORKING]
-#groupFormatter	# [WORKING] [New Position; was after phix, before groupConcat]
-#trimLoop	# [WORKING]
-#phixScreen	# [WORKING]
-#groupConcat	# [WORKING]
-mothurScreen	# [WORKING]
+srrMunch && \	
+16sExtractor && \
+mergeSeqs && \
+q2aReformat && \	
+groupFormatter	&& \ # [New Position; was after phix, before groupConcat]
+trimLoop && \	
+phixScreen && \
+groupConcat && \
+mothurScreen
