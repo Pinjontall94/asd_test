@@ -505,12 +505,12 @@ else
 	echo "asdMetagen: Accession List and Run Table found, continuing..."
 fi
 
-#srrMunch
-#16sExtractor
-#mergeSeqs
-#q2aReformat
-#groupFormatter # [New Position; was after phix, before groupConcat]
-#trimLoop
-#phixScreen
-#groupConcat
-#mothurScreen
+srrMunch
+16sExtractor
+mergeSeqs
+q2aReformat
+groupFormatter # [New Position; was after phix, before groupConcat]
+trimLoop
+phixScreen
+groupConcat
+mothurScreen
