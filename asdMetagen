@@ -486,8 +486,10 @@ pathTester(){
 	else
 	    	echo "asdMetagen: $MODULE_EXEC not found in PATH, "\
 		    "loading most up-to-date module..."
-		MODULE_TO_LOAD=$(module avail $MODULE_NO_VER | awk 'END { print $NF }')
-		eval module load $MODULE_TO_LOAD
+		MODULE_TO_LOAD=$(module avail $MODULE_NO_VER \
+			| awk 'END { print $NF }')
+		echo "asdMetagen: Testing command: module load $MODULE_TO_LOAD"
+		module load "$MODULE_TO_LOAD"
 	    exit 1
 	fi
 }
