@@ -2,9 +2,11 @@
 # asdMetagen -- A bash script to prepare unmerged 16S V4 fastqs for
 #			metagenomic analysis. 
 
-# AUTHOR: Samuel Johnson
-# LICENSE: GNU Affero General Public License https://www.gnu.org/licenses/agpl-3.0.html
-# DEPENDS: poppler-utils, bash, bbmap, mothur, sratoolkit
+# AUTHOR: Sam Johnson
+# LICENSE: GNU Affero General Public License 
+#	https://www.gnu.org/licenses/agpl-3.0.html
+# DEPENDS: poppler-utils v0.87.0-1, bash v5.0.016-1, bbmap v38.00, mothur v3, 
+# 		sratoolkit v2.10.4, cutadapt v2.8
 # VERSION: 0.9.0
 
 # Set input files
@@ -25,7 +27,7 @@ THREADS=${3:-$(( $(nproc) - 2 ))}
 while getopts "h" FLAGS; do
 	case $FLAGS in
 		h)
-			echo "Usage: asdMetagen \[ forward primer \]" \
+			echo "Usage: asdMetagen \[ forward primer \]"\
 				"\[ reverse-compliment of reverse primer \]"
 			exit;;
 	esac
@@ -37,6 +39,9 @@ done
 	
 nucRegex(){
 	# Convert degenerate bases to regex patterns
+
+	# INPUTS: string
+	# OUTPUTS: string
 
 	echo $1 | sed '
 	s/W/(A|T)/
@@ -62,26 +67,32 @@ sraFinder(){
 		shopt -s nullglob
 		for f in *.pdf; do
 			pdftotext $f # convert pdf files to parsable txt files
-			r=$(basename $f .pdf).txt
-			if [[ ! -z $(grep -Eo "[A-Z]{3,}[[:digit:]]{5,}" $r) ]]; then
-				cat $r | grep -Eo "[A-Z]{3,}[[:digit:]]{5,}" $r > \
-					$(echo $r | sed 's/\.txt//').sra
-				# echo anything in txt that has =>3 capitals, followed
-				# 	by => 5 numbers, into a new file with a ".sra"
-				# 	extension (regex: [A-Z]{3,}[[:digit:]]{5,} )
+			r=${f%.pdf}.txt
+			PATTERN="[A-Z]{3,}[[:digit:]]{5,}"
+			if [[ -n $(grep -Eo "$PATTERN" $r) ]]; then
+				grep -Eo "[A-Z]{3,}[[:digit:]]{5,}" $r \
+					> ${r%.txt}.sra
+				# echo anything in txt that has =>3 capitals, 
+				#	followed by => 5 numbers, into a new 
+				#	file with a ".sra" extension (regex: 
+				#	[A-Z]{3,}[[:digit:]]{5,} )
 			else
-				echo "No valid accession number found in file: $f"
+				echo "No valid accession number found"\
+					"in file: $f"
 			fi
 	
 			# Make primers file for screening [WORK IN PROGRESS]
-			#grep -i -P -A 1 "[0-9]{3}f" > $(basename -- $f .pdf)_primers.txt
-			#grep -i -P -A 1 "[0-9]{3}r" >> $(basename -- $f .pdf)_primers.txt
+			#grep -i -P -A 1 "[0-9]{3}f" \
+			#	> $(basename -- $f .pdf)_primers.txt
+			#grep -i -P -A 1 "[0-9]{3}r" \
+			#	>> $(basename -- $f .pdf)_primers.txt
 			rm $r
 		done
 	
 		shopt -u nullglob
 	else
-		echo "asdMetagen: Accession List and Run Table found, continuing..."
+		echo "asdMetagen: Accession List and Run Table found,"\
+			"continuing..."
 fi
 
 }
@@ -120,8 +131,6 @@ sufRegex(){
 		echo "asdMetagen: Error: Expected merge suffices not found" >&2
 		exit 1
 	fi
-	#echo "asdMetagen: Suffix Regex: $SUF_REGX"
-	#REV=$(echo "$1" | sed $SUF_REGX)
 }
 
 srrMunch(){
@@ -139,7 +148,7 @@ srrMunch(){
 
 	SRATOOLKIT_VERSION=$(fastq-dump -V | awk '/[0-9]/ { print $3 }')
 
-	if [[ $SRATOOLKIT_VERSION == "2.10.4" ]]; then
+	if [[ $SRATOOLKIT_VERSION =~ "2\.10" ]]; then
 		SPLIT_OPT="--split-e"
 	else
 		echo "asdMetagen: toolkit ver $SRATOOLKIT_VERSION"
@@ -483,33 +492,48 @@ pathTester(){
 		echo "asdMetagen: WARNING: $2 is in directory, but not PATH"
 	else
 	    	echo "asdMetagen: $2 not found in PATH, "\
-		    "loading most up-to-date module..."
-		MODULE_TO_LOAD=$(module avail $1 | awk 'END { print $NF }')
-		echo "asdMetagen: Testing command: module load $MODULE_TO_LOAD"
-		module load "$MODULE_TO_LOAD"
+		    "if on remote, issue command: 'module avail $1', and "\
+		    "load the necessary module"
+#		MODULE_TO_LOAD=$(module avail $1 | awk 'END { print $NF }')
+#		echo "asdMetagen: Testing command: module load $MODULE_TO_LOAD"
+#		module load "$MODULE_TO_LOAD"
 	    exit 1
 	fi
 }
 
+groupSplit(){
+	# Splits the screened fasta to prepare for fasta header relabeling,
+	# 	necessary for vsearch later
+
+	GOOD_FASTA=$AUTHOR.trimmed.concat.good.fasta
+	GOOD_GROUPS=$AUTHOR.good.groups
+	BATCH_FILE=split_batch.txt
+	echo "GOOD_FASTA=$GOOD_FASTA, GOOD_GROUPS=$GOOD_GROUPS,"\
+		"and BATCH_FILE=$BATCH_FILE"
+	
+	echo "split.groups(fasta=$GOOD_FASTA,"\
+		"group=$GOOD_GROUPS)" > $BATCH_FILE
+#	./mothur $BATCH_FILE 
+	echo "asdMetagen: groupSplit dry run, cat'ing $BATCH_FILE"
+	cat $BATCH_FILE
+	rm $BATCH_FILE
+}
 
 # Main
 
-pathTester cutadapt cutadapt
-pathTester bbmap bbmerge.sh
-pathTester sratoolkit fastq-dump
-pathTester mothur mothur
-if [ ! -f "SRR_Acc_List.txt" ] && [ ! -f "SraRunTable.txt" ]; then
-	sraFinder	# [WORKING]
-else
-	echo "asdMetagen: Accession List and Run Table found, continuing..."
-fi
-
-srrMunch
-16sExtractor
-mergeSeqs
-q2aReformat
-groupFormatter # [New Position; was after phix, before groupConcat]
-trimLoop
-phixScreen
-groupConcat
-mothurScreen
+#pathTester cutadapt cutadapt
+#pathTester bbmap bbmerge.sh
+#pathTester sratoolkit fastq-dump
+#pathTester mothur mothur
+#sraFinder
+#srrMunch
+#16sExtractor
+#mergeSeqs
+#q2aReformat
+#groupFormatter # [New Position; was after phix, before groupConcat]
+#trimLoop
+#phixScreen
+#groupConcat
+#mothurScreen
+groupSplit # split groups & relabel fasta headers & concat again for study
+# concat all study files together
