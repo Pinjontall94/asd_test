@@ -505,17 +505,17 @@ groupSplit(){
 	# Splits the screened fasta to prepare for fasta header relabeling,
 	# 	necessary for vsearch later
 
-	GOOD_FASTA=$AUTHOR.trimmed.concat.good.fasta
-	GOOD_GROUPS=$AUTHOR.good.groups
+	GOOD_FASTA=$AUTHOR.trimmed.concat.fasta
+	GOOD_GROUPS=$AUTHOR.groups
 	BATCH_FILE=split_batch.txt
 	echo "GOOD_FASTA=$GOOD_FASTA, GOOD_GROUPS=$GOOD_GROUPS,"\
 		"and BATCH_FILE=$BATCH_FILE"
 	
 	echo "split.groups(fasta=$GOOD_FASTA,"\
 		"group=$GOOD_GROUPS)" > $BATCH_FILE
-#	./mothur $BATCH_FILE 
-	echo "asdMetagen: groupSplit dry run, cat'ing $BATCH_FILE"
-	cat $BATCH_FILE
+	./mothur $BATCH_FILE
+#	echo "asdMetagen: groupSplit dry run, cat'ing $BATCH_FILE"
+#	cat $BATCH_FILE
 	rm $BATCH_FILE
 }
 

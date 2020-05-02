@@ -3,3 +3,7 @@
 *.accnos
 *.trimmed
 mothur
+*summary
+*groups
+*.fasta
+*.fastq
