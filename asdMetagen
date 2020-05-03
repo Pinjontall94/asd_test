@@ -5,8 +5,8 @@
 # AUTHOR: Sam Johnson
 # LICENSE: GNU Affero General Public License 
 #	https://www.gnu.org/licenses/agpl-3.0.html
-# DEPENDS: poppler-utils v0.87.0-1, bash v5.0.016-1, bbmap v38.00, mothur v3, 
-# 		sratoolkit v2.10.4, cutadapt v2.8
+# DEPENDS: poppler-utils v0.87.0-1, bash v5.0.016-1, bbmap v38.00, mothur v1.39.5, 
+# 		sratoolkit v2.10.5, cutadapt v2.8
 # VERSION: 0.9.0
 
 # Set input files
@@ -37,6 +37,11 @@ done
 	fasta_array=()
 	group_array=()
 	
+
+# ====================
+# == Util Functions ==
+# ====================
+
 nucRegex(){
 	# Convert degenerate bases to regex patterns
 
@@ -58,6 +63,66 @@ nucRegex(){
 	s/X/./
 	'
 }
+
+
+pathTester(){
+	# Test if cutadapt is in PATH, and load if necessary
+
+	if [[ -n $(type -p $2) ]]; then
+		echo "asdMetagen: $2 is in PATH"
+	elif [[ -n $(type -p ./$2) ]]; then
+		echo "asdMetagen: WARNING: $2 is in directory, but not PATH"
+	else
+	    	echo "asdMetagen: $2 not found in PATH, "\
+		    "if on remote, issue command: 'module avail $1', and "\
+		    "load the necessary module"
+#		MODULE_TO_LOAD=$(module avail $1 | awk 'END { print $NF }')
+#		echo "asdMetagen: Testing command: module load $MODULE_TO_LOAD"
+#		module load "$MODULE_TO_LOAD"
+	    exit 1
+	fi
+}
+
+
+sufRegex(){
+	# Takes in unmerged fastq ending in _1|_R1,
+	# 	and returns suffic regex and the name
+	# 	of the reverse read
+
+	# INPUTS: *1.fastq
+	# OUTPUTS: $REV
+	# [Maybe just change incoming "_R1" to "_1" so we don't have to deal
+	# 	with it in the first place]
+
+	if [[ "$1" =~ "_1.fastq" ]]; then
+		REV=${1//_1.fastq/_2.fastq}
+	elif [[ "$1" =~ "_R1.fastq" ]]; then
+		REV=${1//_R1.fastq/_R2.fastq}
+	else
+		echo "asdMetagen: Error: Expected merge suffices not found" >&2
+		exit 1
+	fi
+}
+
+
+joinBy(){
+	# Description: Helper function to join arguments with a given separator
+
+	# INPUTS: $* 
+	# OUTPUTS: $*
+
+	OIFS=$IFS
+	IFS=$1
+
+	shift
+	echo "$*"
+
+	IFS=$OIFS
+}
+
+# ====================
+# == MAIN Functions ==
+# ====================
 
 sraFinder(){
 	# Simple grep parser for all NCBI SRA accession numbers in pdf files in the working directory
@@ -113,25 +178,6 @@ fi
 #	docs. So it'd have to be interactive....maybe this would be a good project to learn some
 #	GUI skills for...
 
-sufRegex(){
-	# Takes in unmerged fastq ending in _1|_R1,
-	# 	and returns suffic regex and the name
-	# 	of the reverse read
-
-	# INPUTS: *1.fastq
-	# OUTPUTS: $REV
-	# [Maybe just change incoming "_R1" to "_1" so we don't have to deal
-	# 	with it in the first place]
-
-	if [[ "$1" =~ "_1.fastq" ]]; then
-		REV=${1//_1.fastq/_2.fastq}
-	elif [[ "$1" =~ "_R1.fastq" ]]; then
-		REV=${1//_R1.fastq/_R2.fastq}
-	else
-		echo "asdMetagen: Error: Expected merge suffices not found" >&2
-		exit 1
-	fi
-}
 
 srrMunch(){
 	# Short script to loop through SRRs in an SRA list, running fastq-dump, and
@@ -141,14 +187,14 @@ srrMunch(){
 	# INPUTS: fastq-dump(), $ACCESSION_LIST
 	# OUTPUTS: *.fastq
 
-	echo "asdMetagen: Looping through $ACCESSION_LIST with sratoolkit and " \
+	echo "asdMetagen: Looping through $ACCESSION_LIST with sratoolkit and" \
 		"unpacking fastqs..."
 
 	shopt -s nullglob
 
 	SRATOOLKIT_VERSION=$(fastq-dump -V | awk '/[0-9]/ { print $3 }')
 
-	if [[ $SRATOOLKIT_VERSION =~ "2\.10" ]]; then
+	if [[ "$SRATOOLKIT_VERSION" =~ "2.10" ]]; then
 		SPLIT_OPT="--split-e"
 	else
 		echo "asdMetagen: toolkit ver $SRATOOLKIT_VERSION"
@@ -286,22 +332,6 @@ q2aReformat(){
 }
 
 
-joinBy(){
-	# Description: Helper function to join arguments with a given separator
-
-	# INPUTS: $* 
-	# OUTPUTS: $*
-
-	OIFS=$IFS
-	IFS=$1
-
-	shift
-	echo "$*"
-
-	IFS=$OIFS
-}
-	
-
 batchArrayadder(){
 	# Description: Add fastas to array
 
@@ -421,7 +451,7 @@ phixScreen(){
 	#     mv merged.fasta clean.merged.fasta
 	#fi
 
-	}
+}
 
 
 groupConcat(){
@@ -462,7 +492,6 @@ mothurScreen(){
 	fi
 
 	# Create screening_batch.txt
-	
 	echo "screen.seqs(fasta=$SCREEN_FASTA, group=$SCREEN_GROUPS, "\
 		"minlength=200, maxlength=300, maxambig=0, maxhomop=8)" \
 		> screening_batch.txt
@@ -476,30 +505,6 @@ mothurScreen(){
 	./mothur screening_batch.txt && rm screening_batch.txt
 }
 
-#grep -Eo "[A-Z]{3,6}[0-9]{4,6}" ../usda/docs/pdf/Hewavitharana_etal_2019_Temporal_Dynamics_ASD_metabolome.txt
-#https://www.ncbi.nlm.nih.gov/search/all/\?term\=PRJNA561262
-#https://www.ncbi.nlm.nih.gov/bioproject/PRJNA561262
-#https://www.ncbi.nlm.nih.gov/sra\?linkname\=bioproject_sra_all\&from_uid\=561262
-#https://www.ncbi.nlm.nih.gov/Traces/study/\?WebEnv\=NCID_1_91785073_130.14.22.33_5555_1583974610_681314290_0MetA0_S_HStore\&query_key\=2
-#https://www.ncbi.nlm.nih.gov/Traces/study/\?query_key\=2\&WebEnv\=NCID_1_91785073_130.14.22.33_5555_1583974610_681314290_0MetA0_S_HStore\&o\=acc_s%3Aa
-
-pathTester(){
-	# Test if cutadapt is in PATH, and load if necessary
-
-	if [[ -n $(type -p $2) ]]; then
-		echo "asdMetagen: $2 is in PATH"
-	elif [[ -n $(type -p ./$2) ]]; then
-		echo "asdMetagen: WARNING: $2 is in directory, but not PATH"
-	else
-	    	echo "asdMetagen: $2 not found in PATH, "\
-		    "if on remote, issue command: 'module avail $1', and "\
-		    "load the necessary module"
-#		MODULE_TO_LOAD=$(module avail $1 | awk 'END { print $NF }')
-#		echo "asdMetagen: Testing command: module load $MODULE_TO_LOAD"
-#		module load "$MODULE_TO_LOAD"
-	    exit 1
-	fi
-}
 
 groupSplit(){
 	# Splits the screened fasta to prepare for fasta header relabeling,
@@ -517,7 +522,42 @@ groupSplit(){
 #	echo "asdMetagen: groupSplit dry run, cat'ing $BATCH_FILE"
 #	cat $BATCH_FILE
 	rm $BATCH_FILE
+
+	# Rename output fastas to reasonable names
+	for i in *.fasta; do
+		if [[ "$i" =~ "concat.$AUTHOR" ]]; then
+			# Remove everything up to "concat."
+			# (i.e. result: author_year_accno.fasta)
+			echo "asdMetagen: Renaming output files to"\
+				"format: author_year_accno.fasta"
+			mv $i ${i#*concat.}
+		else
+			continue
+		fi
+	done
 }
+
+fastaHeaderrelabel(){
+	# Takes a fasta file labeled <author>_<year>_<accno>.fasta
+	# 	and relabels headers for use with vsearch
+	AUTH_YEAR_ACCNO=${1%.fasta}
+	echo "AUTH_YEAR_ACCNO =" $AUTH_YEAR_ACCNO
+	awk -v NAME_STRIPPED="$AUTH_YEAR_ACCNO" '{
+		# Main
+		# 
+		# Input Ex:  ">SRR10007909.1201 1201 length=251"
+		# Output Ex: 
+		# ">Li_2019_SRR10007909_1;barcodelabel=Li_2019_SRR10007909;"
+	
+		if (/^>/) COUNT+=1 
+		VSEARCH_HEADER=">"NAME_STRIPPED"_"COUNT"\;barcodelabel="NAME_STRIPPED"\;"
+		gsub(/^>.*/, VSEARCH_HEADER)
+		print;
+	}' $1 > ${1%.fasta}.bar.fasta
+}
+fastaHeaderrelabel $1
+
+
 
 # Main
 
@@ -537,3 +577,14 @@ groupSplit(){
 #mothurScreen
 groupSplit # split groups & relabel fasta headers & concat again for study
 # concat all study files together
+
+
+# Notes for future web api for sraFinder?
+#grep -Eo "[A-Z]{3,6}[0-9]{4,6}" ../usda/docs/pdf/Hewavitharana_etal_2019_Temporal_Dynamics_ASD_metabolome.txt
+#https://www.ncbi.nlm.nih.gov/search/all/\?term\=PRJNA561262
+#https://www.ncbi.nlm.nih.gov/bioproject/PRJNA561262
+#https://www.ncbi.nlm.nih.gov/sra\?linkname\=bioproject_sra_all\&from_uid\=561262
+#https://www.ncbi.nlm.nih.gov/Traces/study/\?WebEnv\=NCID_1_91785073_130.14.22.33_5555_1583974610_681314290_0MetA0_S_HStore\&query_key\=2
+#https://www.ncbi.nlm.nih.gov/Traces/study/\?query_key\=2\&WebEnv\=NCID_1_91785073_130.14.22.33_5555_1583974610_681314290_0MetA0_S_HStore\&o\=acc_s%3Aa
+
+
