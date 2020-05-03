@@ -7,3 +7,4 @@ mothur
 *groups
 *.fasta
 *.fastq
+mothur.*.logfile
