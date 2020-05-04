@@ -664,7 +664,7 @@ pathTester cutadapt cutadapt
 pathTester bbmap bbmerge.sh
 pathTester sratoolkit fastq-dump
 pathTester mothur mothur
-pathTester mothur vsearch
+#pathTester mothur vsearch
 sraFinder
 srrMunch
 16sExtractor
