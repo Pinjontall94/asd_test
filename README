@@ -60,3 +60,16 @@ for arbitrary sequences is a high priority going forward!)
 
 bbmap, bowtie2, mothur, poppler
 sra-toolkit
+
+---------
+- NOTES -
+---------
+
+Future web api for sraFinder?
+grep -Eo "[A-Z]{3,6}[0-9]{4,6}" ../usda/docs/pdf/Hewavitharana_etal_2019_Temporal_Dynamics_ASD_metabolome.txt
+
+https://www.ncbi.nlm.nih.gov/search/all/\?term\=PRJNA561262
+https://www.ncbi.nlm.nih.gov/bioproject/PRJNA561262
+https://www.ncbi.nlm.nih.gov/sra\?linkname\=bioproject_sra_all\&from_uid\=561262
+https://www.ncbi.nlm.nih.gov/Traces/study/\?WebEnv\=NCID_1_91785073_130.14.22.33_5555_1583974610_681314290_0MetA0_S_HStore\&query_key\=2
+https://www.ncbi.nlm.nih.gov/Traces/study/\?query_key\=2\&WebEnv\=NCID_1_91785073_130.14.22.33_5555_1583974610_681314290_0MetA0_S_HStore\&o\=acc_s%3Aa

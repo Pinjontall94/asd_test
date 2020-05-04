@@ -23,6 +23,10 @@ AUTHOR=${PWD##*/}
 # Set available threads (default: uses all but 2 available threads)
 THREADS=${3:-$(( $(nproc) - 2 ))}
 
+# Set Taxonomic database directory
+TAXO_DB="../../databases/silva_v128/"
+
+
 # Define use flags
 while getopts "h" FLAGS; do
 	case $FLAGS in
@@ -496,6 +500,30 @@ mothurScreen(){
 	echo "asdMetagen: cat'ing screening_batch.txt" 
 	cat screening_batch.txt
 	mothur screening_batch.txt && rm screening_batch.txt
+
+#	mothurBatch screen seqs $SCREEN_PARAMS > screening_batch.txt
+#	mothurBatch summary seqs $SUMMARY_PARAMS >> screening_batch.txt
+#	mothurBatch count groups "group=current" >> screening_batch.txt 
+}
+
+
+mothurBatch(){
+	# Wrapper script for generating simple mothur commands, prints
+	# 	command to stdout to create batch files
+
+	# Note: If you have many parameters, put them in an array!
+	# Ex: EX_PARAMS+=(fasta=blah.fasta,"\
+	#	group=blah.groups)
+	#
+	# Just make sure to refer to them with * expansion, not @ expansion
+	# e.g. mothurBatch doggo play ${EX_PARAMS[*]}
+	# 	|==> doggo.play(fasta=blah.fasta, group=blah.groups)
+
+	COMMAND="$1.$2"
+	PARAMS="$3"
+	BATCH_FILE=$1_$2_batch.txt
+
+	echo "$COMMAND($PARAMS)"
 }
 
 
@@ -562,12 +590,81 @@ fastaHeaderrelabel(){
 }
 
 
+derep(){
+	# Dereplicate the barcoded fasta
+	#
+	# Poret-Peterson: 
+	# 	"Singletons (OTUs represented 1 sequence) are discarded 
+	# 	via the --minuniquesize command; setting this to 2 would 
+	# 	generate OTUs represented by 2 or more sequences"
+	
+	vsearch --derep_fulllength $AUTHOR.barcoded.fasta --sizein --sizeout \
+		--minuniquesize 2 --output $AUTHOR.derep.fasta
+}
+
+
+clusterOTUs(){
+	# Cluster seqs into OTUs
+	#
+	# Poret-Peterson:
+	#
+	#	"Cluster sequences into OTUs (operational taxonomic units) at a
+	#	97% cutoff (97% or more identity among sequences in an OTU). 
+	#	Set threads to 40 in this example. This will need to be changed."
+
+	vsearch --cluster_fast $AUTHOR.derep.fasta --id 0.97 \
+		--centroids $AUTHOR.otus.fasta --uc $AUTHOR.otus.uc \
+		--relabel OTU_ --sizein --sizeout --threads $THREADS
+}
+
+chimeraScreen(){
+	# Screen for chimeric sequences
+	vsearch --uchime_denovo $AUTHOR.otus.fasta --abskew 1.5 \
+		--nonchimeras $AUTHOR.otus.nc.fasta --fasta_width 0
+}
+
+taxoClassify(){
+	# Uses mothur to taxonomically classify OTUs
+	# 	[Note: May need to update silva version prior to running ]
+	TAXO_DB=$1
+	TAXO_PARAMS+=("fasta=$AUTHOR.otus.nc.fasta,"\
+		"template=$TAXO_DBsilva.nr_v128.U515F806R.pcr.good.ng.fasta,"\
+		"taxonomy=$TAXO_DBsilva.nr_v128.U515F806R.pcr.good.tax,"\
+		"cutoff=80")
+	LINEAGE_PARAMS+=("fasta=$AUTHOR.otus.nc.fasta,"\
+		"taxonomy=$AUTHOR.otus.nc.good.wang.taxonomy, taxon=unknown")
+	mothurBatch classify seqs "${TAXO_PARAMS[*]}" > taxo_batch.txt
+	mothurBatch remove lineage "${LINEAGE_PARAMS[*]}" >> taxo_batch.txt
+	mothur taxo_batch.txt && rm taxo_batch.txt
+}
+
+
+mapOTUs(){
+	# Maps OTUs against reads and converts them to an OTU table
+	vsearch --usearch_global $AUTHOR.barcoded.fasta \
+		-db $AUTHOR.otus.nc.pick.fasta \
+		--uc $AUTHOR.otus.nc.readmap.uc --id 0.97 \
+		--strand plus --threads $THREADS &
+}
+
+
+readmap2file(){
+	# Convert the readmap to an OTU table
+	# [ I don't have this python2 file? Also, there's gotta be a way to
+	# 	do this with at least python3. Probably possible with Bash...]
+	python2.7 create_otu_table_from_uc_file.py \
+		-i $AUTHOR.otus.nc.readmap.uc \
+		-o $AUTHOR.otus.final.readmap.table
+}
+
+
 # Main
 
 pathTester cutadapt cutadapt
 pathTester bbmap bbmerge.sh
 pathTester sratoolkit fastq-dump
 pathTester mothur mothur
+pathTester mothur vsearch
 sraFinder
 srrMunch
 16sExtractor
@@ -577,16 +674,13 @@ groupFormatter # [New Position; was after phix, before groupConcat]
 trimLoop
 phixScreen
 groupConcat "*trimmed*fasta" "$AUTHOR.concat.fasta"
-#mothurScreen
-#groupSplit # split groups & relabel fasta headers & concat again for study
-#fastaHeaderrelabel
-#groupConcat "*bar.fasta" "Barcoded.fasta"
-
-
-# Notes for future web api for sraFinder?
-#grep -Eo "[A-Z]{3,6}[0-9]{4,6}" ../usda/docs/pdf/Hewavitharana_etal_2019_Temporal_Dynamics_ASD_metabolome.txt
-#https://www.ncbi.nlm.nih.gov/search/all/\?term\=PRJNA561262
-#https://www.ncbi.nlm.nih.gov/bioproject/PRJNA561262
-#https://www.ncbi.nlm.nih.gov/sra\?linkname\=bioproject_sra_all\&from_uid\=561262
-#https://www.ncbi.nlm.nih.gov/Traces/study/\?WebEnv\=NCID_1_91785073_130.14.22.33_5555_1583974610_681314290_0MetA0_S_HStore\&query_key\=2
-#https://www.ncbi.nlm.nih.gov/Traces/study/\?query_key\=2\&WebEnv\=NCID_1_91785073_130.14.22.33_5555_1583974610_681314290_0MetA0_S_HStore\&o\=acc_s%3Aa
+mothurScreen
+groupSplit
+fastaHeaderrelabel
+groupConcat "*bar.fasta" "$AUTHOR.barcoded.fasta"
+#derep 
+#clusterOTUs
+#chimeraScreen
+#taxoClassify 
+#mapOTUs
+#readmap2file
