@@ -20,22 +20,33 @@ REVPRIME=$2
 # Set author (from current directory)
 AUTHOR=${PWD##*/}
 
-# Set available threads (default: uses all but 2 available threads)
-THREADS=${3:-$(( $(nproc) - 2 ))}
-
 # Set Taxonomic database directory
 TAXO_DB="../../databases/silva_v128/"
 
 
 # Define use flags
-while getopts "h" FLAGS; do
-	case $FLAGS in
+while getopts "h :l" FLAGS; do
+	case "${FLAGS}" in
 		h)
-			echo "Usage: asdMetagen \[ forward primer \]"\
-				"\[ reverse-compliment of reverse primer \]"
+			echo "Usage: asdMetagen [h|l] [ forward primer ]"\
+				"[ reverse-compliment of reverse primer ]"\
+				"[ threads (optional) ]"
 			exit;;
+		l)
+			LOCAL=1
+			;;
 	esac
 done
+shift $(($OPTIND-1))
+
+# Set available threads 
+if [[ $LOCAL=1 ]]; then
+	THREAD_DEFAULT=$(( $(nproc) - 2 ))
+else
+	THREAD_DEFAULT=$(nproc)
+fi
+
+THREADS=${3:-$THREAD_DEFAULT}
 
 # Initialize arrays
 	fasta_array=()
@@ -649,8 +660,7 @@ mapOTUs(){
 
 readmap2file(){
 	# Convert the readmap to an OTU table
-	# [ I don't have this python2 file? Also, there's gotta be a way to
-	# 	do this with at least python3. Probably possible with Bash...]
+	# [ I don't have this python2 file? Also probably possible with Bash ]
 	python2.7 create_otu_table_from_uc_file.py \
 		-i $AUTHOR.otus.nc.readmap.uc \
 		-o $AUTHOR.otus.final.readmap.table
