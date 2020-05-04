@@ -660,10 +660,12 @@ readmap2file(){
 
 # Main
 
+date -u >> metagen.$(date +%N).log
 pathTester cutadapt cutadapt
 pathTester bbmap bbmerge.sh
 pathTester sratoolkit fastq-dump
 pathTester mothur mothur
+pathTester bowtie2 bowtie2
 #pathTester mothur vsearch
 sraFinder
 srrMunch
@@ -684,3 +686,4 @@ groupConcat "*bar.fasta" "$AUTHOR.barcoded.fasta"
 #taxoClassify 
 #mapOTUs
 #readmap2file
+date -u >> metagen.$(date +%N).log
