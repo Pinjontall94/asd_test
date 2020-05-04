@@ -6,7 +6,7 @@
 # LICENSE: GNU Affero General Public License 
 #	https://www.gnu.org/licenses/agpl-3.0.html
 # DEPENDS: poppler-utils v0.87.0-1, bash v5.0.016-1, bbmap v38.00, mothur v1.39.5, 
-# 		sratoolkit v2.10.5, cutadapt v2.8
+# 		sratoolkit v2.10.5, cutadapt v2.8, bowtie2 v2.3.5.1
 # VERSION: 0.9.0
 
 # Set input files
@@ -496,7 +496,6 @@ mothurScreen(){
 		>> screening_batch.txt
 	echo "count.groups(group=current)" >> screening_batch.txt
 
-	echo "asdMetagen: Dry-run of mothurScreen"
 	echo "asdMetagen: cat'ing screening_batch.txt" 
 	cat screening_batch.txt
 	mothur screening_batch.txt && rm screening_batch.txt
