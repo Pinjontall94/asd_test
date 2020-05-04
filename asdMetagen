@@ -198,11 +198,11 @@ srrMunch(){
 
 	SRATOOLKIT_VERSION=$(fastq-dump -V | awk '/[0-9]/ { print $3 }')
 
-	if [[ "$SRATOOLKIT_VERSION" =~ "2.10" ]]; then
-		SPLIT_OPT="--split-e"
+	if [[ ! "$SRATOOLKIT_VERSION" =~ "2.10" ]]; then
+		SPLIT_OPT="--split-3"
 	else
 		echo "asdMetagen: toolkit ver $SRATOOLKIT_VERSION"
-		SPLIT_OPT="--split-3"
+		SPLIT_OPT="--split-e"
 		echo "asdMetagen: attempting fastq-dump with "\
 			"$SPLIT_OPT option..."
 	fi
