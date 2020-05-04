@@ -318,15 +318,8 @@ q2aReformat(){
 	#	RUN BEFORE: -- groupFormatter
 
 	echo "asdMetagen: Reformatting merged fastqs files to fasta format..."
-
-	if [ -z $(type -P reformat.sh) ] && [ -f reformat.sh ]; then
-		COMMAND="./reformat.sh"
-	elif [ ! -z $(type -P reformat.sh) ]; then
-		COMMAND="reformat.sh"
-	fi
-
 	for i in *.merged.fastq; do
-		$COMMAND in=$i out=$(basename $i .fastq).fasta
+		reformat.sh in=$i out=$(basename $i .fastq).fasta
 	done
 
 }
@@ -373,7 +366,7 @@ groupFormatter(){
 	echo "make.group(fasta=$FORMATTER_FASTAS, groups=$FORMATTER_GROUPS)" \
 		> group_batch.temp.txt
 		
-	./mothur group_batch.temp.txt && rm group_batch.temp.txt
+	mothur group_batch.temp.txt && rm group_batch.temp.txt
 
 	# Rename output file to reflect author
 	# 	(rather than the last group name, per mothur's default)
@@ -455,15 +448,15 @@ phixScreen(){
 
 
 groupConcat(){
-	# group_concat.sh
-	# Concat all *trimmed*fasta files in current directory
+	# Concat all specified files and save to a defined output
 
-	# INPUTS: *trimmed*fasta
-	# OUTPUTS: $AUTHOR.trimmed.concat.fasta
+	# INPUTS: *.fasta
+	# OUTPUTS: $AUTHOR.concat.fasta
 
-	for x in *trimmed*fasta; do
+	for x in $1; do
 		# Concat to fasta designated with authors name (from PWD)
-		cat $x >> $AUTHOR.trimmed.concat.fasta
+		echo "asdMetagen: Adding $x to $2..."
+		cat $x >> $2
 	done
 }
 
@@ -471,12 +464,12 @@ groupConcat(){
 mothurScreen(){
 	# Runs mothur against screening_batch.txt to screen concat'd fasta
 
-	# INPUTS: mothur(), PhiX.accnos, $AUTHOR.trimmed.concat.fasta,
+	# INPUTS: mothur(), PhiX.accnos, $AUTHOR.concat.fasta,
 	#		$AUTHOR.groups
 	# OUTPUTS: *.good.count.summary, *.good.groups, *.good.fasta, 
 	#		*.good.summary, *.bad.accnos
 
-	SCREEN_FASTA=$AUTHOR.trimmed.concat.fasta
+	SCREEN_FASTA=$AUTHOR.concat.fasta
 	SCREEN_GROUPS=$AUTHOR.groups
 
 	# Remove PhiX contamination
@@ -485,7 +478,7 @@ mothurScreen(){
 			"group=$AUTHOR.groups, "\	# Not needed by mothur?
 			"accnos=PhiX.accnos)" \
 			>> phix_batch.txt
-		./mothur phix_batch.txt && \
+		mothur phix_batch.txt && \
 		rm phix_batch.txt
 	else
 		echo "asdMetagen: PhiX.accnos is empty, skipping..."
@@ -502,7 +495,7 @@ mothurScreen(){
 	echo "asdMetagen: Dry-run of mothurScreen"
 	echo "asdMetagen: cat'ing screening_batch.txt" 
 	cat screening_batch.txt
-	./mothur screening_batch.txt && rm screening_batch.txt
+	mothur screening_batch.txt && rm screening_batch.txt
 }
 
 
@@ -510,7 +503,7 @@ groupSplit(){
 	# Splits the screened fasta to prepare for fasta header relabeling,
 	# 	necessary for vsearch later
 
-	GOOD_FASTA=$AUTHOR.trimmed.concat.fasta
+	GOOD_FASTA=$AUTHOR.concat.fasta
 	GOOD_GROUPS=$AUTHOR.groups
 	BATCH_FILE=split_batch.txt
 	echo "GOOD_FASTA=$GOOD_FASTA, GOOD_GROUPS=$GOOD_GROUPS,"\
@@ -518,7 +511,7 @@ groupSplit(){
 	
 	echo "split.groups(fasta=$GOOD_FASTA,"\
 		"group=$GOOD_GROUPS)" > $BATCH_FILE
-	./mothur $BATCH_FILE
+	mothur $BATCH_FILE
 #	echo "asdMetagen: groupSplit dry run, cat'ing $BATCH_FILE"
 #	cat $BATCH_FILE
 	rm $BATCH_FILE
@@ -540,43 +533,54 @@ groupSplit(){
 fastaHeaderrelabel(){
 	# Takes a fasta file labeled <author>_<year>_<accno>.fasta
 	# 	and relabels headers for use with vsearch
-	AUTH_YEAR_ACCNO=${1%.fasta}
-	echo "AUTH_YEAR_ACCNO =" $AUTH_YEAR_ACCNO
-	awk -v NAME_STRIPPED="$AUTH_YEAR_ACCNO" '{
-		# Main
-		# 
-		# Input Ex:  ">SRR10007909.1201 1201 length=251"
-		# Output Ex: 
-		# ">Li_2019_SRR10007909_1;barcodelabel=Li_2019_SRR10007909;"
-	
-		if (/^>/) COUNT+=1 
-		VSEARCH_HEADER=">"NAME_STRIPPED"_"COUNT"\;barcodelabel="NAME_STRIPPED"\;"
-		gsub(/^>.*/, VSEARCH_HEADER)
-		print;
-	}' $1 > ${1%.fasta}.bar.fasta
-}
-fastaHeaderrelabel $1
+	#
+	# e.g.:
+	# ">SRR10007909.1201 1201 length=251"
+	# 		|
+	# 		V
+	# ">Li_2019_SRR10007909_1;barcodelabel=Li_2019_SRR10007909;"
+		
 
+	# INPUTS:  $AUTHOR_*.fasta
+	# OUTPUTS: *.bar.fasta
+
+	for i in "$AUTHOR"_*.fasta; do
+		awk -v NAME_STRIPPED="${i%.fasta}" '{
+			# Count every header line
+			if (/^>/) COUNT+=1 
+
+			# Define new header format
+			VSEARCH_HEADER=">"NAME_STRIPPED"_"COUNT"\;barcodelabel="NAME_STRIPPED"\;"
+
+			# Relabel everything after ">" with new header
+			gsub(/^>.*/, VSEARCH_HEADER)
+			print;
+		}' $i > ${i%.fasta}.bar.fasta \
+			# Suppress warning for "\;", that is intentional
+			2>/dev/null
+	done
+}
 
 
 # Main
 
-#pathTester cutadapt cutadapt
-#pathTester bbmap bbmerge.sh
-#pathTester sratoolkit fastq-dump
-#pathTester mothur mothur
-#sraFinder
-#srrMunch
-#16sExtractor
-#mergeSeqs
-#q2aReformat
-#groupFormatter # [New Position; was after phix, before groupConcat]
-#trimLoop
-#phixScreen
-#groupConcat
+pathTester cutadapt cutadapt
+pathTester bbmap bbmerge.sh
+pathTester sratoolkit fastq-dump
+pathTester mothur mothur
+sraFinder
+srrMunch
+16sExtractor
+mergeSeqs
+q2aReformat
+groupFormatter # [New Position; was after phix, before groupConcat]
+trimLoop
+phixScreen
+groupConcat "*trimmed*fasta" "$AUTHOR.concat.fasta"
 #mothurScreen
-groupSplit # split groups & relabel fasta headers & concat again for study
-# concat all study files together
+#groupSplit # split groups & relabel fasta headers & concat again for study
+#fastaHeaderrelabel
+#groupConcat "*bar.fasta" "Barcoded.fasta"
 
 
 # Notes for future web api for sraFinder?
@@ -586,5 +590,3 @@ groupSplit # split groups & relabel fasta headers & concat again for study
 #https://www.ncbi.nlm.nih.gov/sra\?linkname\=bioproject_sra_all\&from_uid\=561262
 #https://www.ncbi.nlm.nih.gov/Traces/study/\?WebEnv\=NCID_1_91785073_130.14.22.33_5555_1583974610_681314290_0MetA0_S_HStore\&query_key\=2
 #https://www.ncbi.nlm.nih.gov/Traces/study/\?query_key\=2\&WebEnv\=NCID_1_91785073_130.14.22.33_5555_1583974610_681314290_0MetA0_S_HStore\&o\=acc_s%3Aa
-
-
