@@ -83,6 +83,11 @@ nucRegex(){
 pathTester(){
 	# Test if cutadapt is in PATH, and load if necessary
 
+	# TODO: Update so if not in PATH, load relevant module, and if no
+	# 	module, switch to local executable in resulting function call.
+	#	(Maybe return a "in_path" variable to be interpreted by
+	#	functions with dependencies?)
+
 	if [[ -n $(type -p $2) ]]; then
 		echo "asdMetagen: $2 is in PATH"
 	elif [[ -n $(type -p ./$2) ]]; then
