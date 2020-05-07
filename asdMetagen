@@ -59,8 +59,8 @@ THREADS=${3:-$THREAD_DEFAULT}
 	fasta_array=()
 	group_array=()
 
-# Set "is local executable?" variable (for legibility)
-is_local=
+# Set "executable in path?" variable (for legibility)
+inPath=
 	
 
 # ====================
@@ -101,15 +101,15 @@ pathTester(){
 
 	if [[ $(type -p $1) ]]; then
 		echo "asdMetagen: $1 is in PATH"
-		is_local=0
+		inPath=1
 	elif [[ $(type -p ./$1) ]]; then
 		echo "asdMetagen: WARNING: $1 is in directory, but not PATH"
-		is_local=1
+		inPath=0
 	else
 	    	echo "asdMetagen: $1 not found in PATH"
 		echo "asdMetagen: Running command: module load $2"
 		module load $2/$3
-	    	exit 1
+	    	inPath=1
 	fi
 }
 
@@ -217,12 +217,12 @@ srrMunch(){
 
 	pathTester fastq-dump sratoolkit $SRA_MOD_VER
 	while read accno; do
-		if ((is_local=0)); then
-			echo "\$is_local = $is_local"
+		if ((inPath=1)); then
+			echo "\$inPath = $inPath"
 			echo "asdMetagen: Using local executable"
 			./fastq-dump --split-e --gzip $accno
 		else
-			echo "\$is_local = $is_local"
+			echo "\$inPath = $inPath"
 			echo "asdMetagen: Using executable in path"
 			fastq-dump --split-e --gzip $accno
 		fi
