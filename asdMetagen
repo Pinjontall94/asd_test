@@ -23,6 +23,13 @@ AUTHOR=${PWD##*/}
 # Set Taxonomic database directory
 TAXO_DB="../../databases/silva_v128/"
 
+# Set Dependency Module Versions
+SRA_MOD_VER=2.10.0
+BBMAP_MOD_VER=38.82
+CUTADAPT_MOD_VER=2.0
+MOTHUR_MOD_VER=1.39.5
+BOWTIE2_MOD_VER=2.3.4.1
+
 
 # Define use flags
 while getopts "h :l" FLAGS; do
@@ -51,6 +58,9 @@ THREADS=${3:-$THREAD_DEFAULT}
 # Initialize arrays
 	fasta_array=()
 	group_array=()
+
+# Set "is local executable?" variable (for legibility)
+is_local=
 	
 
 # ====================
@@ -87,19 +97,19 @@ pathTester(){
 	# 	module, switch to local executable in resulting function call.
 	#	(Maybe return a "in_path" variable to be interpreted by
 	#	functions with dependencies?)
+	# Usage: pathTester <executable> <module> <version> ==> module load... || 
 
-	if [[ -n $(type -p $2) ]]; then
-		echo "asdMetagen: $2 is in PATH"
-	elif [[ -n $(type -p ./$2) ]]; then
-		echo "asdMetagen: WARNING: $2 is in directory, but not PATH"
+	if [[ $(type -p $1) ]]; then
+		echo "asdMetagen: $1 is in PATH"
+		is_local=0
+	elif [[ $(type -p ./$1) ]]; then
+		echo "asdMetagen: WARNING: $1 is in directory, but not PATH"
+		is_local=1
 	else
-	    	echo "asdMetagen: $2 not found in PATH, "\
-		    "if on remote, issue command: 'module avail $1', and "\
-		    "load the necessary module"
-#		MODULE_TO_LOAD=$(module avail $1 | awk 'END { print $NF }')
-#		echo "asdMetagen: Testing command: module load $MODULE_TO_LOAD"
-#		module load "$MODULE_TO_LOAD"
-	    exit 1
+	    	echo "asdMetagen: $1 not found in PATH"
+		echo "asdMetagen: Running command: module load $2"
+		module load $2/$3
+	    	exit 1
 	fi
 }
 
@@ -138,6 +148,15 @@ joinBy(){
 	echo "$*"
 
 	IFS=$OIFS
+}
+
+inputNonzero(){
+	# Checks if input variables are non-zero, otherwise calls 'exit 1'
+	# 	and ends the script
+
+	for i in $@; do
+		[[ -z $i ]] && exit 1 || continue
+	done
 }
 
 # ====================
@@ -182,22 +201,6 @@ fi
 
 }
 
-# TO DO
-
-# Perform web search (maybe with curl, lynx?) for SRA/PRJNA/etc number,
-# 	bypass writing to a separate file, and autodownload SRA
-#	accession list, etc.
-#
-# 	https://www.ncbi.nlm.nih.gov/sra/?term=<SRA NUMBER HERE>
-#
-# 	Must grab from run selector! e.g. for https://www.ncbi.nlm.nih.gov/bioproject/PRJNA561262
-# 	Dang it, I can't find anything for the specific buttons for RunTableInfo and Accession List;
-#	I don't know enough javascript to figure out how to connect to what those buttons do. Maybe
-# 	NCBI has a CLI for grabbing this stuff?
-#	Oh, it'd be a good idea to confirm the SRAs etc. grabbed from each paper before grabbing those
-#	docs. So it'd have to be interactive....maybe this would be a good project to learn some
-#	GUI skills for...
-
 
 srrMunch(){
 	# Short script to loop through SRRs in an SRA list, running fastq-dump, and
@@ -212,27 +215,29 @@ srrMunch(){
 
 	shopt -s nullglob
 
-	SRATOOLKIT_VERSION=$(fastq-dump -V | awk '/[0-9]/ { print $3 }')
-
-	if [[ ! "$SRATOOLKIT_VERSION" =~ "2.10" ]]; then
-		SPLIT_OPT="--split-3"
-	else
-		echo "asdMetagen: toolkit ver $SRATOOLKIT_VERSION"
-		SPLIT_OPT="--split-e"
-		echo "asdMetagen: attempting fastq-dump with "\
-			"$SPLIT_OPT option..."
-	fi
-
-	while read x; do
-		if [ -f "$x.fastq.gz" ]; then
-			# in case the download glitches and needs to be re-run
-			continue
+	pathTester fastq-dump sratoolkit $SRA_MOD_VER
+	while read accno; do
+		if ((is_local=0)); then
+			echo "\$is_local = $is_local"
+			echo "asdMetagen: Using local executable"
+			./fastq-dump --split-e --gzip $accno
 		else
-      			fastq-dump $SPLIT_OPT --gzip $x
-			gzip -d *.fastq.gz
-			rm $x.fastq
+			echo "\$is_local = $is_local"
+			echo "asdMetagen: Using executable in path"
+			fastq-dump --split-e --gzip $accno
 		fi
 	done < $ACCESSION_LIST
+
+#	while read x; do
+#		if [[ -f $x.fastq.gz ]]; then
+#			# in case the download glitches and needs to be re-run
+#			continue
+#		else
+#      			fastq-dump --split-e --gzip $x
+#			gzip -d *.fastq.gz
+#			rm $x.fastq
+#		fi
+#	done < $ACCESSION_LIST
 
 	shopt -u nullglob
 }
@@ -253,12 +258,12 @@ srrMunch(){
 		awk -F "," '/16S/ { print $1 }' $RUNTABLE > 16S_list.txt.temp
 		while read line; do
 			#echo "$line.fastq"
-			eval mv $line*.fastq 16S_temp # Move 16S seqs to temp dir
+			eval mv -v $line*.fastq 16S_temp # Move 16S seqs to temp dir
 		done < 16S_list.txt.temp
 		rm 16S_list.txt.temp
 		# Move the non-match seqs to the filter, or remove filter if all seqs match
-		[[ -z $(ls | grep "\.fastq") ]] && rmdir filter || mv *.fastq filter
-		mv 16S_temp/* . && rmdir 16S_temp
+		[[ -z $(ls | grep "\.fastq") ]] && rmdir filter || mv -v *.fastq filter
+		mv -v 16S_temp/* . && rmdir 16S_temp
 	else
 		echo "No SraRunTable.txt found! Try grep -B 1 -E \"<FORWARD PRIMER>\" on fastqs"
 		echo "\nExample output:"
@@ -355,7 +360,7 @@ batchArrayadder(){
 	for i in $1; do
 		echo "Adding $i to fastas array"
 		fasta_array+=("$i")
-		echo "Adding $AUTHOR\_${i%%.*} to groups array"
+		echo "Adding $AUTHOR_${i%%.*} to groups array"
 		group_array+=("$AUTHOR"_"${i%%.*}")
 	done
 }
@@ -391,7 +396,7 @@ groupFormatter(){
 	# Rename output file to reflect author
 	# 	(rather than the last group name, per mothur's default)
 	echo "asdMetagen: renaming Output File -> $AUTHOR.groups"
-	mv *merged.groups $AUTHOR.groups
+	mv -v *.merged.groups $AUTHOR.groups
 	
 	unset fasta_array
 	unset group_array
@@ -505,16 +510,21 @@ mothurScreen(){
 	fi
 
 	# Create screening_batch.txt
-	echo "screen.seqs(fasta=$SCREEN_FASTA, group=$SCREEN_GROUPS, "\
-		"minlength=200, maxlength=300, maxambig=0, maxhomop=8)" \
-		> screening_batch.txt
-	echo "summary.seqs(fasta=current, processors=$THREADS)" \
-		>> screening_batch.txt
-	echo "count.groups(group=current)" >> screening_batch.txt
-
-	echo "asdMetagen: cat'ing screening_batch.txt" 
-	cat screening_batch.txt
-	mothur screening_batch.txt && rm screening_batch.txt
+	if [[ -z $SCREEN_FASTA || -z $SCREEN_GROUPS ]]; then
+		echo "asdMetagen: Error! Zero-length input variables detected"
+		exit 1
+	else
+		echo "screen.seqs(fasta=$SCREEN_FASTA, group=$SCREEN_GROUPS, "\
+			"minlength=200, maxlength=300, maxambig=0, maxhomop=8)" \
+			> screening_batch.txt
+		echo "summary.seqs(fasta=current, processors=$THREADS)" \
+			>> screening_batch.txt
+		echo "count.groups(group=current)" >> screening_batch.txt
+	
+		echo "asdMetagen: cat'ing screening_batch.txt" 
+		cat screening_batch.txt
+		mothur screening_batch.txt && rm screening_batch.txt
+	fi
 
 #	mothurBatch screen seqs $SCREEN_PARAMS > screening_batch.txt
 #	mothurBatch summary seqs $SUMMARY_PARAMS >> screening_batch.txt
@@ -566,7 +576,7 @@ groupSplit(){
 			# (i.e. result: author_year_accno.fasta)
 			echo "asdMetagen: Renaming output files to"\
 				"format: author_year_accno.fasta"
-			mv $i ${i#*concat.}
+			mv -v $i ${i#*concat.}
 		else
 			continue
 		fi
@@ -674,30 +684,26 @@ readmap2file(){
 
 # Main
 
-date -u >> metagen.$(date +%N).log
-pathTester cutadapt cutadapt
-pathTester bbmap bbmerge.sh
-pathTester sratoolkit fastq-dump
-pathTester mothur mothur
-pathTester bowtie2 bowtie2
-#pathTester mothur vsearch
+logfile=metagen.$(date +%N).log
+
+date -u > $logfile
 sraFinder
 srrMunch
-16sExtractor
-mergeSeqs
-q2aReformat
-groupFormatter # [New Position; was after phix, before groupConcat]
-trimLoop
-phixScreen
-groupConcat "*trimmed*fasta" "$AUTHOR.concat.fasta"
-mothurScreen
-groupSplit
-fastaHeaderrelabel
-groupConcat "*bar.fasta" "$AUTHOR.barcoded.fasta"
+#16sExtractor
+#mergeSeqs
+#q2aReformat
+#groupFormatter # [New Position; was after phix, before groupConcat]
+#trimLoop
+#phixScreen
+#groupConcat "*trimmed*fasta" "$AUTHOR.concat.fasta"
+#mothurScreen
+#groupSplit
+#fastaHeaderrelabel
+#groupConcat "*bar.fasta" "$AUTHOR.barcoded.fasta"
 #derep 
 #clusterOTUs
 #chimeraScreen
 #taxoClassify 
 #mapOTUs
 #readmap2file
-date -u >> metagen.$(date +%N).log
+date -u >> $logfile
