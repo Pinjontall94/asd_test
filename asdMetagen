@@ -684,7 +684,7 @@ readmap2file(){
 
 # Main
 
-logfile=metagen.$(date +%N).log
+logfile=metagen.$(date +%d_%H_%M_%S).log
 
 date -u > $logfile
 sraFinder
