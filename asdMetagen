@@ -244,7 +244,7 @@ srrMunch(){
 
 	pathTester fastq-dump $SRA_MODULE $SRA_MOD_VER
 	while read accno; do
-		biExec fastq-dump --split-e --gzip $accno
+		biExec fastq-dump --split-3 --gzip $accno
 		gzip -d $accno*.fastq.gz
 	done <$ACCESSION_LIST
 
