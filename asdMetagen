@@ -243,8 +243,14 @@ srrMunch(){
 	shopt -s nullglob
 
 	pathTester fastq-dump $SRA_MODULE $SRA_MOD_VER
+	FASTQ_DMP_VER=$(fastq-dump -V | awk '/[0-9]/ { print $3 }')
+	if [[ $FASTQ_DMP_VER == "2.10.5" ]]; then
+		SPLITOPT="--split-e"
+	else
+		SPLITOPT="--split-3"
+	fi
 	while read accno; do
-		biExec fastq-dump --split-3 --gzip $accno
+		biExec fastq-dump $SPLITOPT --gzip $accno
 		gzip -d $accno*.fastq.gz
 	done <$ACCESSION_LIST
 
