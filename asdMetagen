@@ -106,19 +106,23 @@ pathTester(){
 	# 	module, switch to local executable in resulting function call.
 	#	(Maybe return a "in_path" variable to be interpreted by
 	#	functions with dependencies?)
-	# Usage: pathTester <executable> <module> <version> ==> module load... || 
+	# Usage: pathTester <executable> <module (opt.)> <version (opt.)>
 
-	if [[ $(type -p $1) ]]; then
+	if [[ $(type -t $1) ]]; then
 		echo "asdMetagen: $1 is in PATH"
 		inPath=1
-	elif [[ $(type -p ./$1) ]]; then
+	elif [[ $(type -t ./$1) ]]; then
 		echo "asdMetagen: WARNING: $1 is in directory, but not PATH"
 		inPath=0
-	else
+	elif [[ $(type -t module) ]]; then
 	    	echo "asdMetagen: $1 not found in PATH"
 		echo "asdMetagen: Running command: module load $2"
 		module load $2/$3
 	    	inPath=1
+	else
+		echo "asdMetagen: Error! No module, local executable, or path"\
+			"executable found. Aborting..."
+		exit 1
 	fi
 }
 
@@ -631,79 +635,6 @@ fastaHeaderrelabel(){
 }
 
 
-derep(){
-	# Dereplicate the barcoded fasta
-	#
-	# Poret-Peterson: 
-	# 	"Singletons (OTUs represented 1 sequence) are discarded 
-	# 	via the --minuniquesize command; setting this to 2 would 
-	# 	generate OTUs represented by 2 or more sequences"
-	
-	pathTester vsearch $MOTHUR_MODULE $MOTHUR_MOD_VER
-	biExec vsearch --derep_fulllength $AUTHOR.barcoded.fasta \
-		--sizein --sizeout --minuniquesize 2 \
-		--output $AUTHOR.derep.fasta
-}
-
-
-clusterOTUs(){
-	# Cluster seqs into OTUs
-	#
-	# Poret-Peterson:
-	#
-	#	"Cluster sequences into OTUs (operational taxonomic units) at a
-	#	97% cutoff (97% or more identity among sequences in an OTU). 
-	#	Set threads to 40 in this example. This will need to be changed."
-
-	pathTester vsearch $MOTHUR_MODULE $MOTHUR_MOD_VER
-	biExec vsearch --cluster_fast $AUTHOR.derep.fasta --id 0.97 \
-		--centroids $AUTHOR.otus.fasta --uc $AUTHOR.otus.uc \
-		--relabel OTU_ --sizein --sizeout --threads $THREADS
-}
-
-chimeraScreen(){
-	# Screen for chimeric sequences
-	pathTester vsearch $MOTHUR_MODULE $MOTHUR_MOD_VER
-	biExec vsearch --uchime_denovo $AUTHOR.otus.fasta --abskew 1.5 \
-		--nonchimeras $AUTHOR.otus.nc.fasta --fasta_width 0
-}
-
-taxoClassify(){
-	# Uses mothur to taxonomically classify OTUs
-	# 	[Note: May need to update silva version prior to running ]
-	pathTester mothur $MOTHUR_MODULE $MOTHUR_MOD_VER
-	TAXO_DB=$1
-	TAXO_PARAMS+=("fasta=$AUTHOR.otus.nc.fasta,"\
-		"template=$TAXO_DBsilva.nr_v128.U515F806R.pcr.good.ng.fasta,"\
-		"taxonomy=$TAXO_DBsilva.nr_v128.U515F806R.pcr.good.tax,"\
-		"cutoff=80")
-	LINEAGE_PARAMS+=("fasta=$AUTHOR.otus.nc.fasta,"\
-		"taxonomy=$AUTHOR.otus.nc.good.wang.taxonomy, taxon=unknown")
-	mothurBatch classify seqs "${TAXO_PARAMS[*]}" > taxo_batch.txt
-	mothurBatch remove lineage "${LINEAGE_PARAMS[*]}" >> taxo_batch.txt
-	biExec mothur taxo_batch.txt 
-	rm taxo_batch.txt
-}
-
-
-mapOTUs(){
-	# Maps OTUs against reads and converts them to an OTU table
-	pathTester vsearch $MOTHUR_MODULE $MOTHUR_MOD_VER
-	biExec vsearch --usearch_global $AUTHOR.barcoded.fasta \
-		-db $AUTHOR.otus.nc.pick.fasta \
-		--uc $AUTHOR.otus.nc.readmap.uc --id 0.97 \
-		--strand plus --threads $THREADS &
-}
-
-
-readmap2file(){
-	# Convert the readmap to an OTU table
-	python2.7 create_otu_table_from_uc_file.py \
-		-i $AUTHOR.otus.nc.readmap.uc \
-		-o $AUTHOR.otus.final.readmap.table
-}
-
-
 # Main
 
 logfile=metagen.$(date +%d_%H_%M_%S).log
@@ -722,10 +653,4 @@ mothurScreen
 groupSplit
 fastaHeaderrelabel
 groupConcat "*bar.fasta" "$AUTHOR.barcoded.fasta"
-#derep 
-#clusterOTUs
-#chimeraScreen
-#taxoClassify 
-#mapOTUs
-#readmap2file
 date -u >> $logfile
