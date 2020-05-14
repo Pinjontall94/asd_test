@@ -17,6 +17,10 @@ ACCESSION_LIST=SRR_Acc_List.txt
 FORPRIME=$1
 REVPRIME=$2
 
+# Set primer trim offset (in nucleotides)
+FOR_OFFSET=$3
+REV_OFFSET=$4
+
 # Set author (from current directory)
 AUTHOR=${PWD##*/}
 
@@ -318,7 +322,7 @@ mergeSeqs(){
 		"prior to merging"
 
 	# Merge all _1 & _2 fastqs
-	for i in *1.fastq; do
+	for i in *_1.fastq; do
 		sufRegex $i		
 		READ_NAME=$(basename $i _1.fastq) # genericize to _1 or _R1 later?
 		OUT_FILE=$(echo "$i" | sed 's/_\(\|R\)1\.fastq/.merged.fastq/')
@@ -437,11 +441,21 @@ trimLoop(){
 	echo "asdMetagen: Trimming primers..."
 	echo "asdMetagen: FORPRIME = $FORPRIME\tREVPRIME = $REVPRIME"
 	for i in *.merged.fasta; do
+		# Trim Primers
 		m=${i%.fasta}
 		biExec cutadapt -g $FORPRIME -o $m.temp.fasta $i \
 			--discard-untrimmed
 		biExec cutadapt -a $REVPRIME -o $m.trimmed.fasta $m.temp.fasta \
 			--discard-untrimmed
+
+		# Apply offset (if applicable)
+		if ((FOR_OFFSET>0)) && ((REV_OFFSET>0)); then
+			mv -v $m.trimmed.fasta $m.preoffset.fasta
+			biExec cutadapt -u $FOR_OFFSET -o $m.offset.temp.fasta \
+				$m.preoffset.fasta --discard-untrimmed
+			biExec cutadapt -u -$REV_OFFSET -o $m.trimmed.fasta \
+				$m.offset.temp.fasta --discard-untrimmed
+		fi
 	done
 }
 
@@ -639,18 +653,28 @@ fastaHeaderrelabel(){
 
 logfile=metagen.$(date +%d_%H_%M_%S).log
 
-date -u > $logfile
-sraFinder
-srrMunch
-16sExtractor
-mergeSeqs
-q2aReformat
-groupFormatter # [New Position; was after phix, before groupConcat]
-trimLoop
-phixScreen
-groupConcat "*trimmed*fasta" "$AUTHOR.concat.fasta"
-mothurScreen
-groupSplit
-fastaHeaderrelabel
-groupConcat "*bar.fasta" "$AUTHOR.barcoded.fasta"
-date -u >> $logfile
+#date -u > $logfile
+#sraFinder
+#srrMunch
+#16sExtractor
+#mergeSeqs
+#q2aReformat
+#groupFormatter # [New Position; was after phix, before groupConcat]
+#trimLoop
+#phixScreen
+#groupConcat "*trimmed*fasta" "$AUTHOR.concat.fasta"
+#mothurScreen
+#groupSplit
+#fastaHeaderrelabel
+#groupConcat "*bar.fasta" "$AUTHOR.barcoded.fasta"
+#date -u >> $logfile
+
+echo "\$FOR_OFFSET =" $FOR_OFFSET
+echo "\$REV_OFFSET =" $REV_OFFSET
+if ((FOR_OFFSET>0)); then echo "\$FOR_OFFSET is greater than 0"; fi
+if ((REV_OFFSET>0)); then echo "\$REV_OFFSET is greater than 0"; fi
+if ((FOR_OFFSET > 0)) && ((REV_OFFSET > 0)); then
+	echo "Both offsets are > zero"
+else 
+	echo "At least one offset is <= 0"
+fi
