@@ -8,4 +8,4 @@ mothur
 *.fasta
 *.fastq
 mothur.*.logfile
-nohup.out
+nohup.*
