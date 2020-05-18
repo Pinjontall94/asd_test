@@ -13,19 +13,8 @@
 RUNTABLE=SraRunTable.txt
 ACCESSION_LIST=SRR_Acc_List.txt
 
-# Set primers
-#FORPRIME=$1
-#REVPRIME=$2
-
-# Set primer trim offset (in nucleotides)
-#FOR_OFFSET=$3
-#REV_OFFSET=$4
-
 # Set author (from current directory)
 AUTHOR=${PWD##*/}
-
-# Set Taxonomic database directory
-TAXO_DB="../../databases/silva_v128/"
 
 # Set Dependency Module Versions & Names
 SRA_MODULE=sratoolkit
@@ -42,7 +31,6 @@ MOTHUR_MOD_VER=1.39.5
 
 BOWTIE2_MODULE=bowtie2
 BOWTIE2_MOD_VER=2.3.4.1
-
 
 # Define use flags
 while getopts "hlsn:f:r:t:T:" FLAGS; do
@@ -81,7 +69,6 @@ while getopts "hlsn:f:r:t:T:" FLAGS; do
 			;;
 	esac
 done
-#shift $(($OPTIND-1))
 
 # Set available threads 
 if [[ $LOCAL == 1 ]]; then
@@ -102,44 +89,10 @@ fi
 # Set "executable in path?" variable (for legibility)
 inPath=
 
-# =============	
-# == M A I N ==
-# =============
 
-main(){
-	logfile=metagen.$(date +%d_%H_%M_%S).log
-	
-	date -u > $logfile
-	sraFinder
-	if [[ $SKIP_DOWNLOAD == 1 ]]; then
-		echo "Skipping fastq re-download"
-	else
-		srrMunch 
-	fi
-	16sExtractor
-	mergeSeqs
-	q2aReformat
-	groupFormatter # [New Position; was after phix, before groupConcat]
-	trimLoop
-	if [[ $FOR_OFFSET > 0 ]] || [[ $REV_OFFSET > 0 ]]; then
-		offsetTrim
-	else
-		echo "asdMetagen: no offset specified, make sure this"\
-			"is the right target region! (In this case: 520F-802R)"
-	fi
-	phixScreen
-	groupConcat "*trimmed.screened.fasta" "$AUTHOR.concat.fasta"
-	mothurScreen
-	groupSplit
-	fastaHeaderrelabel
-	groupConcat "*bar.fasta" "$AUTHOR.barcoded.fasta"
-	date -u >> $logfile
-}
-
-
-# ====================
-# == Util Functions ==
-# ====================
+# --------------------
+# -- Util Functions --
+# --------------------
 
 nucRegex(){
 	# Convert degenerate bases to regex patterns
@@ -476,16 +429,13 @@ groupFormatter(){
 	FORMATTER_FASTAS=$(joinBy - ${fasta_array[*]})
 	FORMATTER_GROUPS=$(joinBy - ${group_array[*]})
 
-	echo "make.group(fasta=$FORMATTER_FASTAS, groups=$FORMATTER_GROUPS)" \
+	echo "make.group(fasta=$FORMATTER_FASTAS,"\
+		"groups=$FORMATTER_GROUPS,"\
+		"output=$AUTHOR.groups)"\
 		> group_batch.temp.txt
 		
 	biExec mothur group_batch.temp.txt 
 	rm group_batch.temp.txt
-
-	# Rename output file to reflect author
-	# 	(rather than the last group name, per mothur's default)
-	echo "asdMetagen: renaming Output File -> $AUTHOR.groups"
-	mv -v *.merged.groups $AUTHOR.groups
 	
 	unset fasta_array
 	unset group_array
@@ -740,5 +690,39 @@ fastaHeaderrelabel(){
 	done
 }
 
+
+# =============	
+# == M A I N ==
+# =============
+
+main(){
+	logfile=metagen.$(date +%d_%H_%M_%S).log
+	
+	date -u > $logfile
+	sraFinder
+	if [[ $SKIP_DOWNLOAD == 1 ]]; then
+		echo "Skipping fastq re-download"
+	else
+		srrMunch 
+	fi
+	16sExtractor
+	mergeSeqs
+	q2aReformat
+	groupFormatter # [New Position; was after phix, before groupConcat]
+	trimLoop
+	if [[ $FOR_OFFSET > 0 ]] || [[ $REV_OFFSET > 0 ]]; then
+		offsetTrim
+	else
+		echo "asdMetagen: no offset specified, make sure this"\
+			"is the right target region! (In this case: 520F-802R)"
+	fi
+	phixScreen
+	groupConcat "*trimmed.screened.fasta" "$AUTHOR.concat.fasta"
+	mothurScreen
+	groupSplit
+	fastaHeaderrelabel
+	groupConcat "*bar.fasta" "$AUTHOR.barcoded.fasta"
+	date -u >> $logfile
+}
 
 main
