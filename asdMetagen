@@ -45,7 +45,7 @@ BOWTIE2_MOD_VER=2.3.4.1
 
 
 # Define use flags
-while getopts "h :l" FLAGS; do
+while getopts "hln" FLAGS; do
 	case "${FLAGS}" in
 		h)
 			echo "Usage: asdMetagen [h|l] [ forward primer ]"\
@@ -54,6 +54,9 @@ while getopts "h :l" FLAGS; do
 			exit;;
 		l)
 			LOCAL=1
+			;;
+		n)
+			SKIP_DOWNLOAD=1
 			;;
 	esac
 done
@@ -74,7 +77,45 @@ THREADS=${3:-$THREAD_DEFAULT}
 
 # Set "executable in path?" variable (for legibility)
 inPath=
+
+=============	
+== M A I N ==
+=============
+
+main(){
+	logfile=metagen.$(date +%d_%H_%M_%S).log
 	
+	date -u > $logfile
+	sraFinder
+
+	if [[ $SKIP_DOWNLOAD == 1 ]]; then
+		echo "Skipping fastq re-download"
+	else
+		srrMunch 
+	fi
+
+	16sExtractor
+	mergeSeqs
+	q2aReformat
+	groupFormatter # [New Position; was after phix, before groupConcat]
+	trimLoop
+
+	if [[ $3 ]] && [[ $4 ]]; then
+		offsetTrim
+	else
+		echo "asdMetagen: no offset specified, make sure this"\
+			"is the right target region! (In this case: 520F-802R)"
+	fi
+
+	phixScreen
+	groupConcat "*trimmed*fasta" "$AUTHOR.concat.fasta"
+	mothurScreen
+	groupSplit
+	fastaHeaderrelabel
+	groupConcat "*bar.fasta" "$AUTHOR.barcoded.fasta"
+	date -u >> $logfile
+}
+
 
 # ====================
 # == Util Functions ==
@@ -252,13 +293,14 @@ srrMunch(){
 
 	pathTester fastq-dump $SRA_MODULE $SRA_MOD_VER
 	FASTQ_DMP_VER=$(fastq-dump -V | awk '/[0-9]/ { print $3 }')
-	if [[ $FASTQ_DMP_VER == "2.10.5" ]]; then
-		SPLITOPT="--split-e"
-	else
+	if [[ $SRA_MOD_VER == "2.10.0" ]]; then
 		SPLITOPT="--split-3"
+	else
+		echo "asdMetagen: Error: Update \$SPLITOPT in srrMunch()"
+		exit 1
 	fi
 	while read accno; do
-		biExec fastq-dump $SPLITOPT --gzip $accno
+		biExec fastq-dump --split-3 --gzip $accno
 		gzip -d $accno*.fastq.gz
 	done <$ACCESSION_LIST
 
@@ -443,22 +485,46 @@ trimLoop(){
 	for i in *.merged.fasta; do
 		# Trim Primers
 		m=${i%.fasta}
-		biExec cutadapt -g $FORPRIME -o $m.temp.fasta $i \
+		biExec cutadapt -g $FORPRIME -o $m.temp.fasta $i\
 			--discard-untrimmed
-		biExec cutadapt -a $REVPRIME -o $m.trimmed.fasta $m.temp.fasta \
+		biExec cutadapt -a $REVPRIME -o $m.trimmed.fasta $m.temp.fasta\
 			--discard-untrimmed
 
-		# Apply offset (if applicable)
-		if ((FOR_OFFSET>0)) && ((REV_OFFSET>0)); then
+			done
+	rm -v *.temp.*fasta
+}
+
+
+offsetTrim(){
+	# Apply offset (if applicable)
+	# 
+	# TODO: This function is boilerplate and ugly as all get out,
+	#	clean it up later!
+	pathTester cutadapt $CUTADAPT_MODULE $CUTADAPT_MOD_VER
+
+	echo "asdMetagen: Trimming offset nucleotides (if applicable)..."
+	echo "asdMetagen: Forward offset = $FOR_OFFSET nucleotides"
+	echo "asdMetagen: Reverse offse	= $REV_OFFSET nucleotides"
+	for i in *.merged.fasta; do
+		# Trim Primers
+		m=${i%.fasta}
+		if ((FOR_OFFSET > 0)) && ((REV_OFFSET > 0)); then
 			mv -v $m.trimmed.fasta $m.preoffset.fasta
-			biExec cutadapt -u $FOR_OFFSET -o $m.offset.temp.fasta \
+			biExec cutadapt -u $FOR_OFFSET -o $m.offset.temp.fasta\
 				$m.preoffset.fasta --discard-untrimmed
-			biExec cutadapt -u -$REV_OFFSET -o $m.trimmed.fasta \
+			biExec cutadapt -u -$REV_OFFSET -o $m.trimmed.fasta\
 				$m.offset.temp.fasta --discard-untrimmed
+		elif ((FOR_OFFSET > 0)); then
+			mv -v $m.trimmed.fasta $m.preoffset.fasta
+			biExec cutadapt -u $FOR_OFFSET -o $m.offset.temp.fasta\
+				$m.preoffset.fasta --discard-untrimmed
+		else
+			mv -v $m.trimmed.fasta $m.preoffset.fasta
+			biExec cutadapt -u -$REV_OFFSET -o $m.offset.temp.fasta\
+				$m.preoffset.fasta --discard-untrimmed
 		fi
 	done
 }
-
 
 phixScreen(){
 	# DESCRIPTION: Takes in a fasta file, phix databases in a directory named
@@ -649,32 +715,4 @@ fastaHeaderrelabel(){
 }
 
 
-# Main
-
-logfile=metagen.$(date +%d_%H_%M_%S).log
-
-#date -u > $logfile
-#sraFinder
-#srrMunch
-#16sExtractor
-#mergeSeqs
-#q2aReformat
-#groupFormatter # [New Position; was after phix, before groupConcat]
-#trimLoop
-#phixScreen
-#groupConcat "*trimmed*fasta" "$AUTHOR.concat.fasta"
-#mothurScreen
-#groupSplit
-#fastaHeaderrelabel
-#groupConcat "*bar.fasta" "$AUTHOR.barcoded.fasta"
-#date -u >> $logfile
-
-echo "\$FOR_OFFSET =" $FOR_OFFSET
-echo "\$REV_OFFSET =" $REV_OFFSET
-if ((FOR_OFFSET>0)); then echo "\$FOR_OFFSET is greater than 0"; fi
-if ((REV_OFFSET>0)); then echo "\$REV_OFFSET is greater than 0"; fi
-if ((FOR_OFFSET > 0)) && ((REV_OFFSET > 0)); then
-	echo "Both offsets are > zero"
-else 
-	echo "At least one offset is <= 0"
-fi
+main
