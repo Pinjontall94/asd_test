@@ -735,7 +735,7 @@ fastaHeaderrelabel(){
 garbageDay(){
 	mkdir temp keep
 	keep_files_dirs+=("*.fastq" "*.barcoded.fasta" "nohup.*"\
-		"*.txt" "$AUTHOR.concat.*" "$AUTHOR.groups"\
+		"*.txt" "$AUTHOR.concat.*" "$AUTHOR.groups" "*.good.*"\
 		"phix_db" "asdMetagen" "otuGen" "*.slurm" "*.py" "README"\
 		"*.err" "*.out" "LICENSE")
 	mv -v ${keep_files_dirs[*]} -t keep
