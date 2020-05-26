@@ -9,6 +9,9 @@
 # 		sratoolkit v2.10.5, cutadapt v2.8, bowtie2 v2.3.5.1
 # VERSION: 0.9.0
 
+# Set shell options (undone at end of script)
+shopt -s nullglob
+
 # Set input files
 RUNTABLE=SraRunTable.txt
 ACCESSION_LIST=SRR_Acc_List.txt
@@ -217,7 +220,7 @@ sraFinder(){
 	# usage: <sraFinder.sh>
 
 	if [ ! -f "SRR_Acc_List.txt" ] && [ ! -f "SraRunTable.txt" ]; then
-		shopt -s nullglob
+		#shopt -s nullglob
 		for f in *.pdf; do
 			pdftotext $f # convert pdf files to parsable txt files
 			r=${f%.pdf}.txt
@@ -242,7 +245,7 @@ sraFinder(){
 			rm $r
 		done
 	
-		shopt -u nullglob
+		#shopt -u nullglob
 	else
 		echo "asdMetagen: Accession List and Run Table found,"\
 			"continuing..."
@@ -262,8 +265,7 @@ srrMunch(){
 	echo "asdMetagen: Looping through $ACCESSION_LIST with sratoolkit and" \
 		"unpacking fastqs..."
 
-	shopt -s nullglob
-
+	
 	pathTester fastq-dump $SRA_MODULE $SRA_MOD_VER
 	FASTQ_DMP_VER=$(fastq-dump -V | awk '/[0-9]/ { print $3 }')
 	if [[ $SRA_MOD_VER == "2.10.0" ]]; then
@@ -272,20 +274,32 @@ srrMunch(){
 		echo "asdMetagen: Error: Update \$SPLITOPT in srrMunch()"
 		exit 1
 	fi
+
 	while read accno; do
-		biExec fastq-dump --split-3 --gzip $accno
+		biExec fastq-dump --split-3 --gzip $accno 2>>fastq-dump.err
 		gzip -d $accno*.fastq.gz
 	done <$ACCESSION_LIST
 
-	shopt -u nullglob
-
-	# TODO: Add function to re-run fastq-dump if download error occurs
+	# TODO: Check if works (and maybe parameterize fastq-dump call)
+	# Parse *.err files for fastq-dump download errors, store matching
+	# 	accession numbers in array
 	fastq_err=()
-	while IFS= read -r line; do
+	while IFS= read -r -d $'\0' line; do
 		fastq_err+=("$line")
-	done < <(awk '/fastq-dump.*err:/ { print $NF }')
+	done < <(awk '/fastq-dump.*err:/ { print $NF }' fastq-dump.err)
+
+	# If fastq-dump error accnos are found, delete the messed up fastqs
+	# 	re-download, and re-decompress them
 	if [[ ${#fastq_err[@]} > 0 ]]; then
-		rm $fastq_err.fastq
+		for i in ${fastq_err[*]}; do
+			rm $i*.fastq
+			biExec fastq-dump --split-3 --gzip $i
+			gzip -d $accno*.fastq.gz
+		done
+	else
+		echo "asdMetagen: No download errors found for fastq-dump" 
+	fi
+
 }
 
 
@@ -298,6 +312,7 @@ srrMunch(){
 
 	echo "asdMetagen: Filtering out non-16S fastqs by runtable metadata..."
 
+	
 	mkdir 16S_temp filter
 	awk -F "," '/16S/ { print $1 }' $RUNTABLE > 16S_list.txt.temp
 	if [[ -s 16S_list.txt.temp ]]; then
@@ -309,9 +324,6 @@ srrMunch(){
 		rm -v 16S_list.txt.temp
 		# Move the non-match seqs to the filter, or remove filter if all seqs match
 		# TODO: Rewrite to regular if-then statement
-#		[[ -z $(ls | grep "\.fastq") ]] && rmdir filter || mv -v *.fastq filter
-#		mv -v 16S_temp/* . && rmdir 16S_temp
-
 		filter_array=()
 		while IFS= read -r -d $'\0' line; do
 			filter_array+=("$line")
@@ -325,19 +337,28 @@ srrMunch(){
 		fi
 	else
 		rm -v 16S_list.txt.temp
-		echo "No 16S information in run table!"\
-			"Try grep -B 1 -E \"<FORWARD PRIMER>\" on fastqs"
-		echo "\nExample output:"
-		grep -EB 1 $(nucRegex $FORPRIME)
-		# Put grep tool for generating 16S list here
-		# 	(Note: Add both "FPRIMER" __and__ "^FPRIMER" versions, and separate
-		# 	their results in different directories)
-	#	        head -n 2 *.fastq \
-	#	        | grep -EB 1 $FPRIMER \
-	#	        | grep -o "SRR[0-9]\+" \
-	#	        | sed 's/$/.fastq/'
-	        echo "Error: No fastq files found in current directory"
+#		echo "No 16S information in run table!"\
+#			"Try grep -B 1 -E \"<FORWARD PRIMER>\" on fastqs"
+#		echo "\nExample output:"
+#		grep -EB 1 $(nucRegex $FORPRIME)
+		grep_filter=()
+		while IFS= read -r -d $'\0' line; do
+			grep_filter+=("$line")
+		done < <(head -n 2 *.fastq\
+			| grep -EB 1 $(nucRegex $FORPRIME)\
+			| grep -Po "(?<=@)[A-Z]+[0-9]+")
+		if [[ ${#grep_filter[@]} > 0 ]]; then
+			for i in ${grep_filter[@]}; do
+				mv -v $i*.fastq filter
+			done
+		else
+			echo "asdMetagen: No fastqs with $FORPRIME found!"
+			exit 1
+		fi
 	fi
+
+	mv -v 16S_temp/* . && rmdir 16S_temp
+	#shopt -u nullglob
 }
 
 
@@ -352,7 +373,6 @@ mergeSeqs(){
 	# NOTE: RUN AFTER: --- srr_munch.sh
 	#	RUN BEFORE: -- q2a_reformat.sh
 
-	shopt -s nullglob
 	
 	pathTester bbmerge.sh $BBMAP_MODULE $BBMAP_MOD_VER
 
@@ -386,10 +406,8 @@ mergeSeqs(){
 	
 	# Remove garbage output files
 	for i in merged.*; do
-		[ -s $i ] && echo "Unexpected output, $i is non-zero" || rm $i
+		[[ -s $i ]] && echo "Unexpected output, $i is non-zero" || rm $i
 	done
-
-	shopt -u nullglob
 }
 
 
@@ -474,7 +492,7 @@ trimLoop(){
 	pathTester cutadapt $CUTADAPT_MODULE $CUTADAPT_MOD_VER
 
 	echo "asdMetagen: Trimming primers..."
-	echo "asdMetagen: FORPRIME = $FORPRIME\tREVPRIME = $REVPRIME"
+	echo "asdMetagen: FORPRIME = $FORPRIME \t REVPRIME = $REVPRIME"
 	for i in *.merged.fasta; do
 		# Trim Primers
 		m=${i%.fasta}
@@ -715,6 +733,7 @@ fastaHeaderrelabel(){
 
 
 garbageDay(){
+	shopt -s extglob
 	mkdir temp keep
 	keep_files_dirs+=('*.fastq' '*.barcoded.fasta' 'SraRunTable.txt'\
 		'SRR_Acc_List.txt' '$AUTHOR.concat.fasta' 'phix_db')
@@ -728,6 +747,7 @@ garbageDay(){
 		echo "asdMetagen: extra files not deleted!"
 		mv keep/* temp/* -t . && rmdir keep temp
 	fi
+	shopt -u extglob
 }
 
 
@@ -762,9 +782,11 @@ main(){
 	groupSplit
 	fastaHeaderrelabel
 	groupConcat "*bar.fasta" "$AUTHOR.barcoded.fasta"
-	garbageDay
+	#garbageDay
 	date -u >> $logfile
 }
 
-#main
-garbageDay
+main
+#garbageDay
+
+shopt -u nullglob
