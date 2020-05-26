@@ -278,6 +278,14 @@ srrMunch(){
 	done <$ACCESSION_LIST
 
 	shopt -u nullglob
+
+	# TODO: Add function to re-run fastq-dump if download error occurs
+	fastq_err=()
+	while IFS= read -r line; do
+		fastq_err+=("$line")
+	done < <(awk '/fastq-dump.*err:/ { print $NF }')
+	if [[ ${#fastq_err[@]} > 0 ]]; then
+		rm $fastq_err.fastq
 }
 
 
@@ -291,19 +299,34 @@ srrMunch(){
 	echo "asdMetagen: Filtering out non-16S fastqs by runtable metadata..."
 
 	mkdir 16S_temp filter
-	if [ -f $RUNTABLE ]; then
+	awk -F "," '/16S/ { print $1 }' $RUNTABLE > 16S_list.txt.temp
+	if [[ -s 16S_list.txt.temp ]]; then
 		# Create list of 16S seqs from the runtable
-		awk -F "," '/16S/ { print $1 }' $RUNTABLE > 16S_list.txt.temp
 		while read line; do
 			#echo "$line.fastq"
 			eval mv -v $line*.fastq 16S_temp # Move 16S seqs to temp dir
 		done < 16S_list.txt.temp
-		rm 16S_list.txt.temp
+		rm -v 16S_list.txt.temp
 		# Move the non-match seqs to the filter, or remove filter if all seqs match
-		[[ -z $(ls | grep "\.fastq") ]] && rmdir filter || mv -v *.fastq filter
-		mv -v 16S_temp/* . && rmdir 16S_temp
+		# TODO: Rewrite to regular if-then statement
+#		[[ -z $(ls | grep "\.fastq") ]] && rmdir filter || mv -v *.fastq filter
+#		mv -v 16S_temp/* . && rmdir 16S_temp
+
+		filter_array=()
+		while IFS= read -r -d $'\0' line; do
+			filter_array+=("$line")
+		done < <(find . -maxdepth 1 -name "*.fastq" -print0)
+		if [[ ${#filter_array[@]} > 0 ]]; then
+			# move any remaining fastqs to filter
+			mv -v *.fastq filter
+		else
+			# ...or delete filter/ if there aren't any left
+			rmdir filter
+		fi
 	else
-		echo "No SraRunTable.txt found! Try grep -B 1 -E \"<FORWARD PRIMER>\" on fastqs"
+		rm -v 16S_list.txt.temp
+		echo "No 16S information in run table!"\
+			"Try grep -B 1 -E \"<FORWARD PRIMER>\" on fastqs"
 		echo "\nExample output:"
 		grep -EB 1 $(nucRegex $FORPRIME)
 		# Put grep tool for generating 16S list here
@@ -538,7 +561,7 @@ phixScreen(){
 			grep -Eo "[A-Z]{3,6}[0-9]+\.[0-9]+" *merged.bowtie \
 			| awk -F: '{ print $2 }' >> PhiX.accnos
 		else
-			echo "asdMetagen: All *.merged.PhiX are empty, "\
+			echo "asdMetagen: All *.merged.PhiX are empty,"\
 				"skipping PhiX.accnos generation"
 		fi
 	done
@@ -572,26 +595,26 @@ mothurScreen(){
 	SCREEN_GROUPS=$AUTHOR.groups
 
 	# Remove PhiX contamination
-	if [ -s PhiX.accnos ]; then
-		echo "remove.seqs(fasta=$SCREEN_FASTA, "\
-			"group=$AUTHOR.groups, "\	# Not needed by mothur?
+	if [[ -s PhiX.accnos ]]; then
+		echo "remove.seqs(fasta=$SCREEN_FASTA,"\
+			"group=$AUTHOR.groups,"\	# Not needed by mothur?
 			"accnos=PhiX.accnos)" \
 			>> phix_batch.txt
 		biExec mothur phix_batch.txt
-		rm phix_batch.txt
+		rm -v phix_batch.txt
 	else
 		echo "asdMetagen: PhiX.accnos is empty, skipping..."
 	fi
 
 	# Create screening_batch.txt and execute
-	if [[ -z $SCREEN_FASTA || -z $SCREEN_GROUPS ]]; then
+	if [[ -z $SCREEN_FASTA ]] || [[ -z $SCREEN_GROUPS ]]; then
 		echo "asdMetagen: Error! Zero-length input variables detected"
 		exit 1
 	else
-		echo "screen.seqs(fasta=$SCREEN_FASTA, group=$SCREEN_GROUPS, "\
-			"minlength=200, maxlength=300, maxambig=0, maxhomop=8)" \
+		echo "screen.seqs(fasta=$SCREEN_FASTA, group=$SCREEN_GROUPS,"/gc
+			"minlength=200, maxlength=300, maxambig=0, maxhomop=8)"\
 			> screening_batch.txt
-		echo "summary.seqs(fasta=current, processors=$THREADS)" \
+		echo "summary.seqs(fasta=current, processors=$THREADS)"\
 			>> screening_batch.txt
 		echo "count.groups(group=current)" >> screening_batch.txt
 	
@@ -691,6 +714,23 @@ fastaHeaderrelabel(){
 }
 
 
+garbageDay(){
+	mkdir temp keep
+	keep_files_dirs+=('*.fastq' '*.barcoded.fasta' 'SraRunTable.txt'\
+		'SRR_Acc_List.txt' '$AUTHOR.concat.fasta' 'phix_db')
+	mv -v ${keep_files_dirs[*]} -t keep
+	mv -v * temp && mv temp/keep -t .
+	read -r -p "Are you sure you want to delete:\n$(ls temp)\n[y/N]" response
+	if [[ $response =~ "^([yY][eE][sS]|[yY])" ]]; then
+		rm -rv temp
+		mv keep/* . && rmdir keep
+	else
+		echo "asdMetagen: extra files not deleted!"
+		mv keep/* temp/* -t . && rmdir keep temp
+	fi
+}
+
+
 # =============	
 # == M A I N ==
 # =============
@@ -722,7 +762,9 @@ main(){
 	groupSplit
 	fastaHeaderrelabel
 	groupConcat "*bar.fasta" "$AUTHOR.barcoded.fasta"
+	garbageDay
 	date -u >> $logfile
 }
 
-main
+#main
+garbageDay

@@ -13,59 +13,50 @@ for arbitrary sequences is a high priority going forward!)
 -- Order of operations: --
 --------------------------
 
-1. Extract relevant SRA # from study PDF's
-	-- function: sraFinder
+Extract relevant SRA # from study PDF's
 
-2. Search online for SRA run table and metadata
-	-- function: TBD
-	-- [WORKAROUND]: type "!ncbi SRA<result from pdfshot.sh>" into DuckDuckGo
+Search online for SRA run table and metadata
 
-3. Use fastq-dump from SRA-toolkit to download the fastqs
-	-- function: srr_munch
+Use fastq-dump from SRA-toolkit to download the fastqs
 
-4. Filter fastqs to isolate the 16S V4 sequences
-	-- function: 16S_extractor
+Filter fastqs to isolate the 16S V4 sequences
 
-5. Merge forward and reverse fastqs
-	-- function: flash2_merge
+Merge forward and reverse fastqs
 
-6. Convert fastqs to fastas with bbtools "reformat"
-	-- function: q2a_reformat
+Convert fastqs to fastas with bbtools "reformat"
 
-7. Remove primers with cutadapt
-	-- function: primer_trim [VERIFY]
+Make group file for mothur
 
-8. Screen for PhiX (as needed)
-	-- function: phix
-	-- (Relevant Info): ASD_metaanal_screening_fasta.txt
+Remove primers with cutadapt
 
-9. Concatenate fastas 
-	-- function: groupConcat [VERIFY]
+Screen for PhiX (as needed)
 
-10. Make group file for mothur
-	-- function: groupFormatter
+Concatenate fastas 
 
-11. Make summary with mothur for combined fasta file
-	-- function: ./mothur TBD
-	-- (Relevant Info): ASD_metaanal_screening_fasta.txt
+Make summary with mothur for combined fasta file
 
-12. Screen Sequences with mothur
-	-- function: ./mothur screening_batch.txt
-	-- (Relevant Info): ASD_metaanal_screening_fasta.txt
+Screen Sequences with mothur
+
+Split Groups
+
+Relabel fasta headers for compatibility with vsearch
+
+Re-concatenate the barcoded fastas
 
 
 ----------------
 - Dependencies -
 ----------------
 
-bbmap, bowtie2, mothur, poppler
+bash, bbmap, bowtie2, mothur, poppler
 sra-toolkit
 
 ---------
 - NOTES -
 ---------
 
-Future web api for sraFinder?
+* Future web api for sraFinder?
+
 grep -Eo "[A-Z]{3,6}[0-9]{4,6}" ../usda/docs/pdf/Hewavitharana_etal_2019_Temporal_Dynamics_ASD_metabolome.txt
 
 https://www.ncbi.nlm.nih.gov/search/all/\?term\=PRJNA561262
@@ -73,3 +64,27 @@ https://www.ncbi.nlm.nih.gov/bioproject/PRJNA561262
 https://www.ncbi.nlm.nih.gov/sra\?linkname\=bioproject_sra_all\&from_uid\=561262
 https://www.ncbi.nlm.nih.gov/Traces/study/\?WebEnv\=NCID_1_91785073_130.14.22.33_5555_1583974610_681314290_0MetA0_S_HStore\&query_key\=2
 https://www.ncbi.nlm.nih.gov/Traces/study/\?query_key\=2\&WebEnv\=NCID_1_91785073_130.14.22.33_5555_1583974610_681314290_0MetA0_S_HStore\&o\=acc_s%3Aa
+
+- Now that I'm thinking of it, though, it may make more sense to have the PDF 
+	converting part of this be a separate function...may still make sense 
+	as a single GUI app, though
+
+  #############
+ ## TO DO's ##
+#############
+
+05/18/20
+- Modify asdMetagen to delete all files EXCEPT:
+	* original fastq's (including filtered, presumably)
+	* immediate pre- and post-summary fastas
+	* final barcoded fasta
+	* all ".good.*" group and fasta files
+	* phix_db/
+	* SraRunTable.txt & SRR_Acc_List.txt
+
+- Ergo, delete all files after they're DEFINITELY not needed
+	* So, maybe a final cleanup function?
+	* Could add an optional flag to bypass it (-k for "keep"?)
+
+mkdir keep temp
+mv *.fastq *.
