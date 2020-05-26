@@ -733,21 +733,26 @@ fastaHeaderrelabel(){
 
 
 garbageDay(){
-	shopt -s extglob
 	mkdir temp keep
-	keep_files_dirs+=('*.fastq' '*.barcoded.fasta' 'SraRunTable.txt'\
-		'SRR_Acc_List.txt' '$AUTHOR.concat.fasta' 'phix_db')
+	keep_files_dirs+=("*.fastq" "*.barcoded.fasta" "nohup.*"\
+		"*.txt" "$AUTHOR.concat.*" "$AUTHOR.groups"\
+		"phix_db" "asdMetagen" "otuGen" "*.slurm" "*.py" "README"\
+		"*.err" "*.out" "LICENSE")
 	mv -v ${keep_files_dirs[*]} -t keep
-	mv -v * temp && mv temp/keep -t .
-	read -r -p "Are you sure you want to delete:\n$(ls temp)\n[y/N]" response
-	if [[ $response =~ "^([yY][eE][sS]|[yY])" ]]; then
+	for i in *; do
+		if [ ! -d "$i" ]; then
+			mv -v $i temp
+		fi
+	done
+	printf "Are you sure you want to delete:\n$(ls temp)\n"
+	read -r -p "[y/N] " response
+	if [[ $response =~ ^([yY][eE][sS]|[yY])$ ]]; then
 		rm -rv temp
 		mv keep/* . && rmdir keep
 	else
 		echo "asdMetagen: extra files not deleted!"
 		mv keep/* temp/* -t . && rmdir keep temp
 	fi
-	shopt -u extglob
 }
 
 
@@ -786,7 +791,7 @@ main(){
 	date -u >> $logfile
 }
 
-main
-#garbageDay
+#main
+garbageDay
 
 shopt -u nullglob
