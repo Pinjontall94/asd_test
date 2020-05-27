@@ -9,3 +9,4 @@ mothur
 *.fastq
 mothur.*.logfile
 nohup.*
+original/
