@@ -161,8 +161,8 @@ taxoClassify(){
 	# 	[Note: May need to update silva version prior to running]
 	pathTester mothur $MOTHUR_MODULE $MOTHUR_MOD_VER
 	TAXO_PARAMS+=("fasta=metaan.otus.nc.fasta,"\
-		"template=$TAXO_DB/silva.nr_v138.U515F806R.pcr.good.ng.fasta,"\
-		"taxonomy=$TAXO_DB/silva.nr_v138.U515F806R.pcr.good.tax,"\
+		"template=$TAXO_DB/silva.nr_v138.ng.fasta,"\
+		"taxonomy=$TAXO_DB/silva.nr_v138.tax,"\
 		"cutoff=80")
 	LINEAGE_PARAMS+=("fasta=metaan.otus.nc.fasta,"\
 		"taxonomy=metaan.otus.nc.good.wang.taxonomy, taxon=unknown")
@@ -197,6 +197,7 @@ readmap2file(){
 
 main(){
 	for i in *.barcoded.fasta; do
+		echo "adding $i to metaan.barcoded.fasta"
 		cat $i >> metaan.barcoded.fasta
 	done
 	derep 
