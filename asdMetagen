@@ -36,10 +36,10 @@ BOWTIE2_MODULE=bowtie2
 BOWTIE2_MOD_VER=2.3.4.1
 
 # Define use flags
-while getopts "hlsn:f:r:t:T:" FLAGS; do
+while getopts "hlskn:f:r:t:T:" FLAGS; do
 	case "${FLAGS}" in
 		h)
-			echo "Usage: asdMetagen [-hls] [-n threads]"\
+			echo "Usage: asdMetagen [-hlsk] [-n threads]"\
 				"-f <forward primer>"\
 				"-r <reverse-compliment of reverse primer>"
 			exit
@@ -49,6 +49,9 @@ while getopts "hlsn:f:r:t:T:" FLAGS; do
 			;;
 		s)
 			SKIP_DOWNLOAD=1
+			;;
+		k)
+			KEEP=1
 			;;
 		n)
 			THREADS=$OPTARG
@@ -733,26 +736,13 @@ fastaHeaderrelabel(){
 
 
 garbageDay(){
-	mkdir temp keep
-	keep_files_dirs+=("*.fastq" "*.barcoded.fasta" "nohup.*"\
-		"*.txt" "$AUTHOR.concat.fasta" "$AUTHOR.groups" "*.good.*"\
-		"phix_db" "asdMetagen" "otuGen" "*.slurm" "*.py" "README"\
-		"*.err" "*.out" "LICENSE")
-	mv -v ${keep_files_dirs[*]} -t keep
-	for i in *; do
-		if [ ! -d "$i" ]; then
-			mv -v $i temp
+	unneeded_files+=("*.bad.*" "*.merged.*"\
+		"$AUTHOR\_*.fasta" "fastq-dump.err")
+	for i in ${unneeded_files[@]}; do
+		if [[ -f $i ]]; then
+			rm -v $i
 		fi
 	done
-	printf "Are you sure you want to delete:\n$(ls temp)\n"
-	read -r -p "[y/N] " response
-	if [[ $response =~ ^([yY][eE][sS]|[yY])$ ]]; then
-		rm -rv temp
-		mv keep/* . && rmdir keep
-	else
-		echo "asdMetagen: extra files not deleted!"
-		mv keep/* temp/* -t . && rmdir keep temp
-	fi
 }
 
 
@@ -787,11 +777,14 @@ main(){
 	groupSplit
 	fastaHeaderrelabel
 	groupConcat "*bar.fasta" "$AUTHOR.barcoded.fasta"
-	#garbageDay
+	if [[ $KEEP > 0 ]]; then
+		echo "asdMetagen: Keeping all generated files"
+	else
+		garbageDay
+	fi
 	date -u >> $logfile
 }
 
-#main
-garbageDay
+main
 
 shopt -u nullglob
