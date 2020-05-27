@@ -36,27 +36,33 @@ BOWTIE2_MODULE=bowtie2
 BOWTIE2_MOD_VER=2.3.4.1
 
 # Define use flags
-while getopts "hlsmkn:f:r:c:t:T:" FLAGS; do
+while getopts "hlDEMkn:f:r:c:t:T:" FLAGS; do
 	case "${FLAGS}" in
 		h)
-			echo "Usage: asdMetagen [-hlsmk] [-n threads]"\
-				"-f <forward primer>"\
-				"-r <reverse-compliment of reverse primer>"\
-				"[ -c column number for accession numbers ]"\
-				"[ -tT 5'/3' offset to trim ]"
+			echo "Usage: asdMetagen [-h] [-l local]"\
+				"[-DEM Skip Download | 16S Extraction | Merge]"
+			echo "[-k keep files] [-n <threads>]"\
+				"[-f <forward primer>]"\
+				"[-r <reverse-compliment of reverse primer>]"
+			echo "[-c <column number for accession numbers>]"
+			echo "[-t <5' offset (in nucl.)>]"\
+				"[-T <3' offset>]"
 			exit
 			;;
 		l)
 			LOCAL=1
 			;;
-		s)
+		D)
 			SKIP_DOWNLOAD=1
 			;;
-		m)
+		E)
+			SKIP_EXTRACT=1
+			;;
+		M)
 			SKIP_MERGE=1
 			;;
 		k)
-			KEEP=1
+			KEEP_FILES=1
 			;;
 		n)
 			THREADS=$OPTARG
@@ -232,7 +238,6 @@ sraFinder(){
 	# usage: <sraFinder.sh>
 
 	if [ ! -f "SRR_Acc_List.txt" ] && [ ! -f "SraRunTable.txt" ]; then
-		#shopt -s nullglob
 		for f in *.pdf; do
 			pdftotext $f # convert pdf files to parsable txt files
 			r=${f%.pdf}.txt
@@ -256,8 +261,6 @@ sraFinder(){
 			#	>> $(basename -- $f .pdf)_primers.txt
 			rm $r
 		done
-	
-		#shopt -u nullglob
 	else
 		echo "asdMetagen: Accession List and Run Table found,"\
 			"continuing..."
@@ -279,7 +282,6 @@ srrMunch(){
 
 	
 	pathTester fastq-dump $SRA_MODULE $SRA_MOD_VER
-	FASTQ_DMP_VER=$(fastq-dump -V | awk '/[0-9]/ { print $3 }')
 	if [[ $SRA_MOD_VER == "2.10.0" ]]; then
 		SPLITOPT="--split-3"
 	else
@@ -292,9 +294,9 @@ srrMunch(){
 		gzip -d $accno*.fastq.gz
 	done <$ACCESSION_LIST
 
-	# TODO: Check if works (and maybe parameterize fastq-dump call)
-	# Parse *.err files for fastq-dump download errors, store matching
-	# 	accession numbers in array
+	# TODO: Parameterize fastq-dump call?
+	# Parse fastq-dump.err files for fastq-dump download errors, 
+	# store matching accession numbers in array
 	fastq_err=()
 	while IFS= read -r -d $'\0' line; do
 		fastq_err+=("$line")
@@ -355,10 +357,6 @@ srrMunch(){
 		fi
 	else
 		rm -v 16S_list.txt.temp
-#		echo "No 16S information in run table!"\
-#			"Try grep -B 1 -E \"<FORWARD PRIMER>\" on fastqs"
-#		echo "\nExample output:"
-#		grep -EB 1 $(nucRegex $FORPRIME)
 		grep_filter=()
 		while IFS= read -r -d $'\0' line; do
 			grep_filter+=("$line")
@@ -376,7 +374,6 @@ srrMunch(){
 	fi
 
 	mv -v 16S_temp/* . && rmdir 16S_temp
-	#shopt -u nullglob
 }
 
 
@@ -769,34 +766,49 @@ main(){
 	logfile=metagen.$(date +%d_%H_%M_%S).log
 	
 	date -u > $logfile
+
 	sraFinder
+
+	# Download fastqs by accession number
 	if [[ $SKIP_DOWNLOAD == 1 ]]; then
 		echo "Skipping fastq re-download"
 	else
 		srrMunch 
 	fi
-	16sExtractor
+
+	# Filter out non-16S sequences
+	if [[ $SKIP_EXTRACT > 0 ]]; then
+		echo "asdMetagen: Skipping 16S sorting"
+	else
+		16sExtractor
+	fi
+
+	# Merge forward and reverse reads
 	if [[ $SKIP_MERGE > 0 ]]; then
-		echo "asdMetagen: Skipping mergeSeqs..."
+		echo "asdMetagen: Skipping merge stage"
 	else
 		mergeSeqs
 	fi
+
 	q2aReformat
-	groupFormatter # [New Position; was after phix, before groupConcat]
+	groupFormatter
 	trimLoop
+
+	# Trim nucleotide offset
 	if [[ $FOR_OFFSET > 0 ]] || [[ $REV_OFFSET > 0 ]]; then
 		offsetTrim
 	else
 		echo "asdMetagen: no offset specified, make sure this"\
 			"is the right target region! (In this case: 520F-802R)"
 	fi
+
 	phixScreen
 	groupConcat "*trimmed.screened.fasta" "$AUTHOR.concat.fasta"
 	mothurScreen
 	groupSplit
 	fastaHeaderrelabel
 	groupConcat "*bar.fasta" "$AUTHOR.barcoded.fasta"
-	if [[ $KEEP > 0 ]]; then
+	if [[ $KEEP_FILES > 0 ]]; then
 		echo "asdMetagen: Keeping all generated files"
 	else
 		garbageDay
