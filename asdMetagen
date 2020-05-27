@@ -140,11 +140,6 @@ nucRegex(){
 
 pathTester(){
 	# Test if cutadapt is in PATH, and load if necessary
-
-	# TODO: Update so if not in PATH, load relevant module, and if no
-	# 	module, switch to local executable in resulting function call.
-	#	(Maybe return a "in_path" variable to be interpreted by
-	#	functions with dependencies?)
 	# Usage: pathTester <executable> <module (opt.)> <version (opt.)>
 
 	if [[ $(type -t $1) ]]; then
@@ -341,7 +336,6 @@ srrMunch(){
 			#echo "$line.fastq"
 			eval mv -v $line*.fastq 16S_temp # Move 16S seqs to temp dir
 		done < 16S_list.txt.temp
-		rm -v 16S_list.txt.temp
 		# Move the non-match seqs to the filter, or remove filter if all seqs match
 		# TODO: Rewrite to regular if-then statement
 		filter_array=()
@@ -356,23 +350,29 @@ srrMunch(){
 			rmdir filter
 		fi
 	else
-		rm -v 16S_list.txt.temp
-		grep_filter=()
-		while IFS= read -r -d $'\0' line; do
-			grep_filter+=("$line")
-		done < <(head -n 2 *.fastq\
-			| grep -EB 1 $(nucRegex $FORPRIME)\
-			| grep -Po "(?<=@)[A-Z]+[0-9]+")
-		if [[ ${#grep_filter[@]} > 0 ]]; then
-			for i in ${grep_filter[@]}; do
-				mv -v $i*.fastq filter
-			done
-		else
-			echo "asdMetagen: No fastqs with $FORPRIME found!"
-			exit 1
-		fi
+		# NOTE: This may be unnecessary. What I *should* do is filter
+		#	the accnos prior to downloading. If some ITS, etc. seqs
+		#	slip through the cracks, cutadapt will toss them.
+#		grep_filter=()
+#		while IFS= read -r -d $'\0' line; do
+#			grep_filter+=("$line")
+#		done < <(head -n 2 *.fastq\
+#			| grep -EB 1 $(nucRegex $FORPRIME)\
+#			| grep -Po "(?<=@)[A-Z]+[0-9]+")
+#		if [[ ${#grep_filter[@]} > 0 ]]; then
+#			for i in ${grep_filter[@]}; do
+#				mv -v $i*.fastq filter
+#			done
+#		else
+#			echo "asdMetagen: No fastqs with $FORPRIME found!"
+#			exit 1
+#		fi
+
+		echo "asdMetagen: awk filter failed to find 16S seqs,"\
+			"leaving filtering duties to cutadapt.."
 	fi
 
+	rm -v 16S_list.txt.temp
 	mv -v 16S_temp/* . && rmdir 16S_temp
 }
 
@@ -420,9 +420,9 @@ mergeSeqs(){
 	done
 	
 	# Remove garbage output files
-	for i in merged.*; do
-		[[ -s $i ]] && echo "Unexpected output, $i is non-zero" || rm $i
-	done
+#	for i in merged.*; do
+#		[[ -s $i ]] && echo "Unexpected output, $i is non-zero" || rm $i
+#	done
 }
 
 
@@ -440,7 +440,7 @@ q2aReformat(){
 
 	echo "asdMetagen: Reformatting merged fastqs files to fasta format..."
 	for i in *.merged.fastq; do
-		biExec reformat.sh in=$i out=$(basename $i .fastq).fasta
+		biExec reformat.sh in=$i out=${i%.fastq}.fasta
 	done
 
 }
@@ -764,13 +764,11 @@ garbageDay(){
 
 main(){
 	logfile=metagen.$(date +%d_%H_%M_%S).log
-	
 	date -u > $logfile
-
 	sraFinder
 
 	# Download fastqs by accession number
-	if [[ $SKIP_DOWNLOAD == 1 ]]; then
+	if [[ $SKIP_DOWNLOAD > 0 ]]; then
 		echo "Skipping fastq re-download"
 	else
 		srrMunch 
@@ -785,7 +783,12 @@ main(){
 
 	# Merge forward and reverse reads
 	if [[ $SKIP_MERGE > 0 ]]; then
+		#TODO: Clean this up so it's not in main
 		echo "asdMetagen: Skipping merge stage"
+		echo "asdMetagen: Renaming fastqs for pipeline compatibility"
+		for i in *.fastq; do
+			mv $i ${i%.fastq}.merged.fastq
+		done
 	else
 		mergeSeqs
 	fi
@@ -808,11 +811,14 @@ main(){
 	groupSplit
 	fastaHeaderrelabel
 	groupConcat "*bar.fasta" "$AUTHOR.barcoded.fasta"
+
+	# Remove unneeded files
 	if [[ $KEEP_FILES > 0 ]]; then
 		echo "asdMetagen: Keeping all generated files"
 	else
 		garbageDay
 	fi
+
 	date -u >> $logfile
 }
 

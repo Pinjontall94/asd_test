@@ -17,29 +17,38 @@ MOTHUR_MOD_VER=1.39.5
 inPath=
 
 # Set Taxonomic database directory
-TAXO_DB="../../databases/silva_v128/"
+#TAXO_DB="../../databases/silva_v128/"
 
 # Define use flags
-while getopts "h :l" FLAGS; do
+while getopts "hld:" FLAGS; do
 	case "${FLAGS}" in
 		h)
-			echo "Usage: otuGen [h|l] [ threads (optional) ]"
+			echo "Usage: otuGen [-h help] [-l local ] [-n threads (optional)] [-d <taxo db dir>]"
 			exit;;
 		l)
 			LOCAL=1
 			;;
+		n)
+			THREADS=$OPTARG
+			;;
+		d)
+			TAXO_DB=$OPTARG
+			;;
 	esac
 done
-shift $(($OPTIND-1))
+
 
 # Set available threads 
-if [[ $LOCAL=1 ]]; then
+if [[ $LOCAL == 1 ]]; then
 	THREAD_DEFAULT=$(( $(nproc) - 2 ))
 else
 	THREAD_DEFAULT=$(nproc)
 fi
 
-THREADS=${1:-$THREAD_DEFAULT}
+if [[ ! $THREADS ]]; then
+	echo "otuGen: Setting threads to default setting"
+	THREADS=$THREAD_DEFAULT
+fi
 
 
 # ====================
@@ -48,13 +57,7 @@ THREADS=${1:-$THREAD_DEFAULT}
 
 pathTester(){
 	# Test if cutadapt is in PATH, and load if necessary
-
-	# TODO: Update so if not in PATH, load relevant module, and if no
-	# 	module, switch to local executable in resulting function call.
-	#	(Maybe return a "in_path" variable to be interpreted by
-	#	functions with dependencies?)
 	# Usage: pathTester <executable> <module (opt.)> <version (opt.)>
-
 
 	if [[ $(type -t $1) ]]; then
 		echo "asdMetagen: $1 is in PATH"
@@ -169,9 +172,16 @@ readmap2file(){
 }
 
 
-#derep 
-#clusterOTUs
-#chimeraScreen
-#taxoClassify 
-#mapOTUs
-#readmap2file
+# =============	
+# == M A I N ==
+# =============
+
+main(){
+	derep 
+	clusterOTUs
+	chimeraScreen
+	taxoClassify 
+	mapOTUs
+	readmap2file
+}
+main
