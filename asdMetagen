@@ -36,12 +36,14 @@ BOWTIE2_MODULE=bowtie2
 BOWTIE2_MOD_VER=2.3.4.1
 
 # Define use flags
-while getopts "hlskn:f:r:t:T:" FLAGS; do
+while getopts "hlsmkn:f:r:c:t:T:" FLAGS; do
 	case "${FLAGS}" in
 		h)
-			echo "Usage: asdMetagen [-hlsk] [-n threads]"\
+			echo "Usage: asdMetagen [-hlsmk] [-n threads]"\
 				"-f <forward primer>"\
-				"-r <reverse-compliment of reverse primer>"
+				"-r <reverse-compliment of reverse primer>"\
+				"[ -c column number for accession numbers ]"\
+				"[ -tT 5'/3' offset to trim ]"
 			exit
 			;;
 		l)
@@ -49,6 +51,9 @@ while getopts "hlskn:f:r:t:T:" FLAGS; do
 			;;
 		s)
 			SKIP_DOWNLOAD=1
+			;;
+		m)
+			SKIP_MERGE=1
 			;;
 		k)
 			KEEP=1
@@ -64,6 +69,10 @@ while getopts "hlskn:f:r:t:T:" FLAGS; do
 		r)
 			REVPRIME=$OPTARG
 			echo "REVPRIME = $REVPRIME"
+			;;
+		c)
+			COLUMN=$OPTARG
+			echo "Run Table accession number column: $COLUMN"
 			;;
 		t)
 			FOR_OFFSET=$OPTARG
@@ -317,7 +326,13 @@ srrMunch(){
 
 	
 	mkdir 16S_temp filter
-	awk -F "," '/16S/ { print $1 }' $RUNTABLE > 16S_list.txt.temp
+	if [[ $COLUMN ]]; then
+		awk -F "," -v c=$COLUMN '/16S/ { print $c }' $RUNTABLE \
+			> 16S_list.txt.temp
+	else
+		awk -F "," '/16S/ { print $1 }' $RUNTABLE \
+			> 16S_list.txt.temp
+	fi
 	if [[ -s 16S_list.txt.temp ]]; then
 		# Create list of 16S seqs from the runtable
 		while read line; do
@@ -761,7 +776,11 @@ main(){
 		srrMunch 
 	fi
 	16sExtractor
-	mergeSeqs
+	if [[ $SKIP_MERGE > 0 ]]; then
+		echo "asdMetagen: Skipping mergeSeqs..."
+	else
+		mergeSeqs
+	fi
 	q2aReformat
 	groupFormatter # [New Position; was after phix, before groupConcat]
 	trimLoop
