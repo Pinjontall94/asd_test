@@ -324,10 +324,10 @@ srrMunch(){
 	
 	mkdir 16S_temp filter
 	if [[ $COLUMN ]]; then
-		awk -F "," -v c=$COLUMN '/16S/ { print $c }' $RUNTABLE \
+		awk -v c=$COLUMN '/16S/ { print $c }' $RUNTABLE \
 			> 16S_list.txt.temp
 	else
-		awk -F "," '/16S/ { print $1 }' $RUNTABLE \
+		awk '/16S/ { print $1 }' $RUNTABLE \
 			> 16S_list.txt.temp
 	fi
 	if [[ -s 16S_list.txt.temp ]]; then
