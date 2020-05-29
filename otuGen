@@ -159,13 +159,16 @@ chimeraScreen(){
 taxoClassify(){
 	# Uses mothur to taxonomically classify OTUs
 	# 	[Note: May need to update silva version prior to running]
+	TAXO_TEMPLATE=$(find $TAXO_DB -maxdepth 1 -name "*.ng.fasta")
+	TAXO_NOMY=$(find $TAXO_DB -maxdepth 1 -name "*.tax")
+
 	pathTester mothur $MOTHUR_MODULE $MOTHUR_MOD_VER
 	TAXO_PARAMS+=("fasta=metaan.otus.nc.fasta,"\
-		"template=$TAXO_DB/silva.nr_v138.ng.fasta,"\
-		"taxonomy=$TAXO_DB/silva.nr_v138.tax,"\
-		"cutoff=80")
+		"template=$TAXO_TEMPLATE,"\
+		"taxonomy=$TAXO_NOMY,"\
+		"cutoff=80", "output=metaan.otus.nc.good.wang.taxonomy")
 	LINEAGE_PARAMS+=("fasta=metaan.otus.nc.fasta,"\
-		"taxonomy=metaan.otus.nc.good.wang.taxonomy, taxon=unknown")
+		"taxonomy=metaan.otus.nc.nr_v138.wang.taxonomy, taxon=unknown")
 	mothurBatch classify seqs "${TAXO_PARAMS[*]}" > taxo_batch.txt
 	mothurBatch remove lineage "${LINEAGE_PARAMS[*]}" >> taxo_batch.txt
 	biExec mothur taxo_batch.txt 
