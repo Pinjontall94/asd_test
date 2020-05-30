@@ -106,7 +106,7 @@ while getopts "hlDMn:p:d:c:t:T:f:r:" FLAGS; do
 done
 
 # Set available threads 
-if [[ $LOCAL == 1 ]]; then
+if [[ $LOCAL ]]; then
 	THREAD_DEFAULT=$(( $(nproc) - 2 ))
 else
 	THREAD_DEFAULT=$(nproc)
@@ -116,8 +116,13 @@ if [[ ! $THREADS ]]; then
 	echo "$0: Setting threads to default setting"
 	THREADS=$THREAD_DEFAULT
 fi
+echo "$0: THREADS = $THREADS"
 
 # Initialize arrays
+	in_type=()
+	out_type=()
+	in_file=()
+	out_file=()
 	fasta_array=()
 	group_array=()
 
@@ -162,6 +167,10 @@ sraFinder(){
 			"continuing..."
 fi
 
+
+	# Move inputs and outputs back to corresponding directories
+	out_type=X
+	outPrep Y Z
 }
 
 
@@ -231,8 +240,12 @@ srrMunch(){
 	fi
 
 	# Create output directory
-	mkdir fastqs
-	mv -v *.fastq fastqs
+#	mkdir fastqs
+#	mv -v *.fastq fastqs
+
+	# Move inputs and outputs back to corresponding directories
+	out_type=X
+	outPrep Y Z
 }
 
 
@@ -278,7 +291,11 @@ srrMunch(){
 	fi
 
 	rm -v 16S_list.txt.temp
-	mv -v 16S_temp/* fastqs && rmdir 16S_temp
+	#mv -v 16S_temp/* fastqs && rmdir 16S_temp
+
+	# Move inputs and outputs back to corresponding directories
+	out_type=X
+	outPrep Y Z
 }
 
 
@@ -325,10 +342,12 @@ mergeSeqs(){
 	done
 	
 	# Create output directory
-	mkdir merged_fastqs
-	mv -v fastqs/*.merged.fastq merged_fastqs
+#	mkdir merged_fastqs
+#	mv -v fastqs/*.merged.fastq merged_fastqs
 
-	#outStore merged_fastqs "fastqs/*.merged.fastqs"
+	# Move inputs and outputs back to corresponding directories
+	out_type=X
+	outPrep Y Z
 }
 
 
@@ -350,9 +369,12 @@ q2aReformat(){
 	done
 
 	# Create output directory
-	mkdir merged_fastas
-	mv -v merged_fastqs/*.fasta merged_fastas
-	#outStore merged_fastas "merged_fastqs/*.fasta"
+#	mkdir merged_fastas
+#	mv -v merged_fastqs/*.fasta merged_fastas
+
+	# Move inputs and outputs back to corresponding directories
+	out_type=X
+	outPrep Y Z
 }
 
 
@@ -406,9 +428,13 @@ groupFormatter(){
 		
 	biExec mothur group_batch.temp.txt 
 	rm group_batch.temp.txt
+
+	# Move inputs and outputs back to corresponding directories
+	out_type=X
+	outPrep Y Z
 	
 	# Move fastas back into their dedicated directory
-	mv -v *.fasta merged_fastas
+#	mv -v *.fasta merged_fastas
 }
 
 
@@ -418,14 +444,21 @@ trimLoop(){
 
 	# INPUT: cutadapt(), $FORPRIME, $REVPRIME, *.merged.fasta
 	# OUTPUT: *.trimmed.fasta
+	
+	# Set input type
+	in_type=fasta
+
+	# Move input files to working directory
+	inPrep merged_fastas
 	pathTester cutadapt $CUTADAPT_MODULE $CUTADAPT_MOD_VER
 
 	echo "$0: Trimming primers..."
 	echo "$0: FORPRIME = $FORPRIME \t REVPRIME = $REVPRIME"
 	# Move fastas into working directory
-	mv -v merged_fastas/* .
+#	mv -v merged_fastas/* .
 
-	for i in *.fasta; do
+#	for i in *.fasta; do
+	for i in ${in_file[@]}; do
 		m=${i%.fasta}
 		if [[ $FORPRIME ]]; then
 			biExec cutadapt -g $FORPRIME\
@@ -441,12 +474,15 @@ trimLoop(){
 	done
 	rm -v *.temp.fasta
 	
-	# Create output directory
-	mkdir trimmed_fastas
-
-	# Move inputs and outputs to dedicated directories
-	mv -v *.trimmed.fasta trimmed_fastas
-	mv -v *.merged.fasta merged_fastas
+	# Move inputs and outputs back to corresponding directories
+	out_type=*.trimmed.fasta
+	outPrep merged_fastas trimmed_fastas
+#	# Create output directory
+#	mkdir trimmed_fastas
+#
+#	# Move inputs and outputs to dedicated directories
+#	mv -v *.trimmed.fasta trimmed_fastas
+#	mv -v *.merged.fasta merged_fastas
 }
 
 
@@ -461,10 +497,14 @@ offsetTrim(){
 	echo "$0: Forward offset = $FOR_OFFSET nucleotides"
 	echo "$0: Reverse offset = $REV_OFFSET nucleotides"
 	
-	# Move input files to working directory
-	mv -v trimmed_fastas/* .
+	# Set input type
+	in_type=fasta
 
-	for i in *.fasta; do
+	# Move input files to working directory
+	inPrep trimmed_fastas
+	#mv -v trimmed_fastas/* .
+
+	for i in ${in_file[@]}; do
 		PRE_OFFSET=${i//trimmed/preoffset}
 		OFFSET_TEMP=${i//trimmed/offset.temp}
 		OUTPUT=${i//trimmed/offset}
@@ -485,13 +525,9 @@ offsetTrim(){
 	# Remove temp files
 	rm -v *.temp.fasta 
 
-	# Move input files back to corresponding directory
-	mv -v *.trimmed.fasta trimmed_fastas
-
-	# Create output directory
-	mkdir offset_fastas
-	mv -v *.offset.* offset_fastas
-	#outStore offset_fastas "*.offset.fasta"
+	# Move inputs and outputs back to corresponding directories
+	out_type=offset
+	outPrep trimmed_fastas offset_fastas
 }
 
 phixScreen(){
@@ -504,30 +540,15 @@ phixScreen(){
 	
 	# Set input type
 	if [[ -d offset_fastas ]]; then
-		IN_TYPE=offset.fasta
+		in_type=offset.fasta
 	else
-		IN_TYPE=trimmed.fasta
+		in_type=trimmed.fasta
 	fi
 
 	# Set input files and directories
-	IN_DIR=${IN_TYPE%.fasta}\_fastas
-	IN_FILE=()
-	for file in $IN_DIR/*; do
-		# If files in the input directory match the
-		#	input type pattern, add them to the input
-		#	file array
-		if [[ $file =~ $IN_TYPE ]]; then
-			IN_FILE+=("${file##*/}")
-		fi
-	done
-	echo "$0: PhiX IN_DIR = $IN_DIR, IN_FILE = ${IN_FILE[@]}"
-
-	# Move input files to working directory
-	echo "\$IN_DIR/\${IN_FILE[*]} = $IN_DIR/${IN_FILE[*]}"
-	mv -v $IN_DIR/${IN_FILE[*]} .
+	inPrep ${in_type%.fasta}\_fastas
 
 	pathTester bowtie2 $BOWTIE2_MODULE $BOWTIE2_MOD_VER
-	echo "$0: Screening for PhiX contamination"
 
 	# Set default PhiX db directory (if none provided)
 	if [[ ! $PHIX_DB ]]; then
@@ -535,16 +556,13 @@ phixScreen(){
 	fi
 
 	# Loop bowtie2 over processed fastas
-	for i in ${IN_FILE[@]}; do
-		echo "TEST: -f $i -S ${i%%.*}.merged.bowtie"\
-			"--un ${i%%.}.screened.fasta"
-		echo "--al ${i%%.*}.merged.PhiX"\
-			"--local -p $THREADS"
-#		biExec bowtie2 -f $i -x $PHIX_DB\
-#			-S ${i%%.*}.merged.bowtie\
-#			--un ${i%%.}.screened.fasta\
-#			--al ${i%%.*}.merged.PhiX\
-#			--local -p $THREADS
+	echo "$0: Screening for PhiX contamination"
+	for i in ${in_file[@]}; do
+		biExec bowtie2 -f $i -x $PHIX_DB\
+			-S ${i%%.*}.merged.bowtie\
+			--un ${i%%.*}.screened.fasta\
+			--al ${i%%.*}.merged.PhiX\
+			--local -p $THREADS
 	done
 
 	# Once complete, generate list of reads to be screened out
@@ -566,36 +584,10 @@ phixScreen(){
 		fi
 	done
 
-	# Move outputs into new directory
-#	mkdir PhiX
-#	phix_exts=("*.merged.PhiX" "*.merged.bowtie" "*.screened"\
-#		"PhiX.accnos")
-#	for i in ${phix_exts[@]}; do
-#		if [[ -f $i ]]; then
-#			mv -v $i PhiX
-#		fi
-#	done
-#
-#	# Return inputs to their directory
-#	mv -v *.$IN_TYPE.* $IN_DIR
-
-	# Set output files and directories
-	OUT_DIR=PhiX\_fastas
-	OUT_TYPE=("*.merged.PhiX" "*.merged.bowtie" "*.screened"\
+	# Move inputs and outputs back to corresponding directories
+	out_type+=(".merged.PhiX" ".merged.bowtie" ".screened.fasta"\
 		"PhiX.accnos")
-	OUT_FILE=()
-	for pattern in ${OUT_TYPE[*]}; do
-		for file in $pattern; do
-			if [[ -f $file ]]; then
-				OUT_FILE+=("$file")
-			fi
-		done
-	done
-	echo "$0: PhiX OUT_DIR = $OUT_DIR, OUT_FILE = ${OUT_FILE[@]}"
-	mkdir $OUT_DIR
-
-	# Move output files to output directory
-	mv -v ${OUT_FILE[*]} $OUT_DIR
+	outPrep ${in_type%.fasta}\_fastas PhiX_fastas
 }
 
 
@@ -672,6 +664,10 @@ mothurScreen(){
 #		biExec mothur screening_batch.txt 
 #		rm screening_batch.txt
 #	fi
+
+	# Move inputs and outputs back to corresponding directories
+	out_type=X
+	outPrep Y Z
 }
 
 
@@ -703,6 +699,10 @@ groupSplit(){
 			continue
 		fi
 	done
+
+	# Move inputs and outputs back to corresponding directories
+	out_type=X
+	outPrep Y Z
 }
 
 
@@ -735,6 +735,10 @@ fastaHeaderrelabel(){
 			# Suppress warning for "\;", that is intentional
 			2>/dev/null
 	done
+
+	# Move inputs and outputs back to corresponding directories
+	out_type=X
+	outPrep Y Z
 }
 
 
@@ -802,7 +806,7 @@ pathTester(){
 biExec(){
 	# Use after pathTester, executes local executable if not in path
 	# Usage: biExec <command string>
-	if ((inPath=1)); then
+	if ((enPath=1)); then
 		echo "\$inPath = $inPath"
 		echo "$0: Using executable in path"
 		echo "$0: command: $*"
@@ -838,10 +842,9 @@ sufRegex(){
 
 
 joinBy(){
-	# Description: Helper function to join arguments with a given separator
-
-	# INPUT: $* 
-	# OUTPUT: $*
+	# Takes first argument as new delimiter, then echoes all following
+	# 	arguments with that delimiter
+	# Usage: joinBy <separator> <arg1> [...] <argN>
 
 	OIFS=$IFS
 	IFS=$1
@@ -857,26 +860,10 @@ inputNonzero(){
 	# 	and ends the script
 
 	for i in $@; do
-		[[ -z $i ]] && exit 1 || continue
-	done
-}
-
-
-outStore(){
-	# Creates an output directory and stores matching files in it
-	# INPUT: <directory name> <file type 1> ... <file type n>
-	# OUTPUT: directory/<file type {1..n}>
-	# Ex: outStore PhiX "*.merged.PhiX" "*.merged.bowtie" "*.screened"
-
-	OUT_DIR=$1
-	mkdir $OUT_DIR
-	for i in $@; do
-		echo "adding $i to out_array"
-		out_array+=("$i")
-	done
-	
-	for i in ${out_array[@]}; do
-		mv -v $i -t $OUT_DIR
+		if [[ -s $i ]]; then
+			echo "$0: Error: input file $i is zero-length"
+			exit 0
+		fi
 	done
 }
 
@@ -900,22 +887,63 @@ mothurBatch(){
 	echo "$COMMAND($PARAMS)"
 }
 
-inTypes(){
-	# Takes a name of an existing directory and a regex pattern,
-	#	and generates variables for input directory and file
-	# Usage: inTypes <input directory> <input type>
-	# INPUT: dir, regex pattern
-	# OUTPUT: $IN_DIR, $IN_FILE
-
-	# Set input files and directories
+inPrep(){
+	# Takes input directory argument and global input array, and
+	#	moves relevant input files to working directory
+	# Usage: inPrep <IN_DIR>
+	
+	# Set types and directories
 	IN_DIR=$1
-	IN_TYPE=$2
-	IN_FILE=()
-	for file in $IN_DIR; do
-		if [[ $file =~ $IN_TYPE ]]; then
-			IN_FILE+=("$file")
+
+	# Set input files
+	in_file=()
+	for file in $IN_DIR/*; do
+		# If files in the input directory match the
+		#	input type pattern, add them to the input
+		#	file array
+		if [[ -f $file ]] && [[ $file =~ $in_type ]]; then
+			in_file+=("${file##*/}")
 		fi
 	done
+	echo "$0: in_type = $in_type IN_DIR = $IN_DIR, in_file = ${in_file[@]}"
+
+	# Move input files to working directory
+	for i in ${in_file[@]}; do
+		mv -v $IN_DIR/$i .
+	done
+}
+
+outPrep(){
+	# Moves input and output files to corresponding directories
+	#	(also creates the output directory)
+	# Usage: outPrep <input dir> <output dir>
+ 
+	# Set input and output directories 
+	IN_DIR=$1
+	OUT_DIR=$2
+	
+	# Create output directory
+	mkdir $OUT_DIR
+
+	# Add all files matching the output types to the output file array
+	out_file=()
+	for file in *; do
+		# If files in the working directory match the
+		#	output type pattern, add them to the output
+		#	file array
+		if [[ -f $file ]] && [[ $file =~ $out_type ]]; then
+			out_file+=("$file")
+		fi
+	done
+	echo "$0: out_type = ${out_type[@]} OUT_DIR = $OUT_DIR,"\
+		"out_file = ${out_file[@]}"
+
+	# Move inputs and outputs to corresponding directories
+	mv -v ${in_file[*]} $IN_DIR
+	mv -v ${out_file[*]} $OUT_DIR
+	
+	# Reset input and output arrays
+	unset in_file out_file in_type out_type
 }
 
 # =============	
@@ -928,14 +956,14 @@ main(){
 	sraFinder
 
 	# Download fastqs by accession number
-	if [[ $SKIP_DOWNLOAD > 0 ]]; then
+	if [[ $SKIP_DOWNLOAD ]]; then
 		echo "Skipping fastq re-download"
 	else
 		srrMunch 
 	fi
 
 	# Merge forward and reverse reads
-	if [[ $SKIP_MERGE > 0 ]]; then
+	if [[ $SKIP_MERGE ]]; then
 		#TODO: Clean this up so it's not in main
 		echo "$0: Skipping merge stage"
 		echo "$0: Renaming fastqs for pipeline compatibility"
@@ -951,7 +979,7 @@ main(){
 	trimLoop
 
 	# Trim nucleotide offset
-	if [[ $FOR_OFFSET > 0 ]] || [[ $REV_OFFSET > 0 ]]; then
+	if [[ $FOR_OFFSET ]] || [[ $REV_OFFSET ]]; then
 		offsetTrim
 	else
 		echo "$0: no offset specified, make sure this"\
