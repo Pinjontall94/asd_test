@@ -118,7 +118,7 @@ if [[ ! $THREADS ]]; then
 fi
 echo "$0: THREADS = $THREADS"
 
-# Initialize arrays
+## Initialize arrays
 	in_type=()
 	out_type=()
 	in_file=()
@@ -133,45 +133,6 @@ inPath=
 # ====================
 # == MAIN Functions ==
 # ====================
-
-sraFinder(){
-	# Simple grep parser for all NCBI SRA accession numbers in pdf files in the working directory
-	# usage: <sraFinder.sh>
-
-	if [ ! -f "SRR_Acc_List.txt" ] && [ ! -f "SraRunTable.txt" ]; then
-		for f in *.pdf; do
-			pdftotext $f # convert pdf files to parsable txt files
-			r=${f%.pdf}.txt
-			PATTERN="[A-Z]{3,}[[:digit:]]{5,}"
-			if [[ -n $(grep -Eo "$PATTERN" $r) ]]; then
-				grep -Eo "[A-Z]{3,}[[:digit:]]{5,}" $r \
-					> ${r%.txt}.sra
-				# echo anything in txt that has =>3 capitals, 
-				#	followed by => 5 numbers, into a new 
-				#	file with a ".sra" extension (regex: 
-				#	[A-Z]{3,}[[:digit:]]{5,} )
-			else
-				echo "No valid accession number found"\
-					"in file: $f"
-			fi
-	
-			# Make primers file for screening [WORK IN PROGRESS]
-			#grep -i -P -A 1 "[0-9]{3}f" \
-			#	> $(basename -- $f .pdf)_primers.txt
-			#grep -i -P -A 1 "[0-9]{3}r" \
-			#	>> $(basename -- $f .pdf)_primers.txt
-			rm $r
-		done
-	else
-		echo "$0: Accession List and Run Table found,"\
-			"continuing..."
-fi
-
-
-	# Move inputs and outputs back to corresponding directories
-	out_type=X
-	outPrep Y Z
-}
 
 
 srrMunch(){
@@ -240,12 +201,8 @@ srrMunch(){
 	fi
 
 	# Create output directory
-#	mkdir fastqs
-#	mv -v *.fastq fastqs
-
-	# Move inputs and outputs back to corresponding directories
-	out_type=X
-	outPrep Y Z
+	mkdir fastqs
+	mv -v *.fastq fastqs
 }
 
 
@@ -255,6 +212,12 @@ srrMunch(){
 
 	# INPUT: fastq-dump, $RUNTABLE, *.fastq
 	# OUTPUT: filter/, *.fastq
+
+	# Set input type
+	in_type=X
+
+	# Move input files to working directory
+	inPrep Y
 
 	echo "$0: Filtering out non-16S fastqs by runtable metadata..."
 
@@ -310,34 +273,46 @@ mergeSeqs(){
 	# NOTE: RUN AFTER: --- srr_munch.sh
 	#	RUN BEFORE: -- q2a_reformat.sh
 
-	
+	# Set input type
+	in_type=fastq
+
+	# Move input files to working directory
+	inPrep fastqs
+
 	pathTester bbmerge.sh $BBMAP_MODULE $BBMAP_MOD_VER
 
 	echo "$0: Checking forward and reverse fastq read counts"\
 		"prior to merging"
 
 	# Merge all _1 & _2 fastqs
-	for i in fastqs/*_1.fastq; do
-		#sufRegex $i # Create $REV from $i (unnecessary?)		
-		REV=${i//_1.fastq/_2.fastq}
-		READ_NAME=${i%_1.fastq}
-		OUT_FILE=${i%_1.fastq}.merged.fastq
-		# Make sure the read numbers are identical between forward
-		# 	and reverse
-		# TODO:[Clean this up, just check the first few times for efficiency]
-		echo "Checking: $i $REV"
-		F_READ_NUM=$(grep -c "@$READ_NAME" $i)
-		R_READ_NUM=$(grep -c "@$READ_NAME" $REV)
-
-		if [[ $F_READ_NUM == $R_READ_NUM ]]; then
-			echo "$0: Read counts match; "\
-				"Now merging: $i and $REV"
-			echo "$0: Merge out file: $OUT_FILE"
-			biExec bbmerge.sh in1="$i" in2="$REV" out="$OUT_FILE"
+	for i in ${in_file[@]}; do
+		if [[ $i =~ _1.fastq ]]; then
+			# Select forward reads in the for loop,
+			#	then designate the reverse from $i
+			REV=${i//_1.fastq/_2.fastq}
+			READ_NAME=${i%_1.fastq}
+			OUT_FILE=${i%_1.fastq}.merged.fastq
+			# Make sure the read numbers are identical between
+			#	forward and reverse
+			# TODO: [Clean this up, just check the first few times
+			#	for efficiency]
+			echo "Checking: $i $REV"
+			F_READ_NUM=$(grep -c "@$READ_NAME" $i)
+			R_READ_NUM=$(grep -c "@$READ_NAME" $REV)
+	
+			if [[ $F_READ_NUM == $R_READ_NUM ]]; then
+				echo "$0: Read counts match; "\
+					"Now merging: $i and $REV"
+				echo "$0: Merge out file: $OUT_FILE"
+				biExec bbmerge.sh in1="$i" in2="$REV" out="$OUT_FILE"
+			else
+				echo "Mismatch found, delete reads for $READ_NAME and "\
+					"re-run fastq-dump before proceeding"
+				exit 0
+			fi
 		else
-			echo "Mismatch found, delete reads for $READ_NAME and "\
-				"re-run fastq-dump before proceeding"
-			exit 0
+			# Skip all non-"*_1.fastq" files
+			continue
 		fi
 	done
 	
@@ -346,8 +321,8 @@ mergeSeqs(){
 #	mv -v fastqs/*.merged.fastq merged_fastqs
 
 	# Move inputs and outputs back to corresponding directories
-	out_type=X
-	outPrep Y Z
+	out_type="merged.fastq"
+	outPrep fastqs merged_fastqs
 }
 
 
@@ -358,13 +333,20 @@ q2aReformat(){
 	# OUTPUT: *.merged.fasta
 
 	# Deps: bbtools 'reformat' tool
-
+	
 	# NOTE: RUN AFTER: --- mergeSeqs
 	#	RUN BEFORE: -- groupFormatter
+
+	# Set input type
+	in_type=fastq
+
+	# Move input files to working directory
+	inPrep merged_fastqs
+
 	pathTester reformat.sh $BBMAP_MODULE $BBMAP_MOD_VER
 
 	echo "$0: Reformatting merged fastqs files to fasta format..."
-	for i in merged_fastqs/*; do
+	for i in ${in_file[@]}; do
 		biExec reformat.sh in=$i out=${i%.fastq}.fasta
 	done
 
@@ -373,8 +355,8 @@ q2aReformat(){
 #	mv -v merged_fastqs/*.fasta merged_fastas
 
 	# Move inputs and outputs back to corresponding directories
-	out_type=X
-	outPrep Y Z
+	out_type=fasta
+	outPrep merged_fastqs merged_fastas
 }
 
 
@@ -407,31 +389,47 @@ groupFormatter(){
 
 	# Ex: mothur > make.group(fasta=sample1.fasta-sample2.fasta-sample3.fasta, groups=A-B-C)
 
+	# Set input type
+	in_type=fasta
+
+	# Move input files to working directory
+	inPrep merged_fastas
+
 	pathTester mothur $MOTHUR_MODULE $MOTHUR_MOD_VER
-	OUT_FILE=$AUTHOR.groups
 
 	# Move fastas into working directory
-	mv -v merged_fastas/* .
+	#mv -v merged_fastas/* .
 
 	# Add fastas and group names to their corresponding arrays
-	batchArrayadder "*.fasta"
+#	batchArrayadder "*.fasta"
 
 	# Create "-"-separated strings from the arrays for use with mothur
-	FORMATTER_FASTAS=$(joinBy - ${fasta_array[*]})
-	FORMATTER_GROUPS=$(joinBy - ${group_array[*]})
+#	FORMATTER_FASTAS=$(joinBy - ${fasta_array[*]})
+#	FORMATTER_GROUPS=$(joinBy - ${group_array[*]})
+
+	formatter_fastas=$(joinBy - ${in_file[*]})
+	for i in ${in_file[@]}; do
+		group_array+=("$AUTHOR"_"${i%%.*}")
+	done
+	formatter_groups=$(joinBy - ${group_array[*]})
+
 
 	#TODO: Rewrite with mothurBatch
-	echo "make.group(fasta=$FORMATTER_FASTAS,"\
-		"groups=$FORMATTER_GROUPS,"\
-		"output=$AUTHOR.groups)"\
-		> group_batch.temp.txt
+#	echo "make.group(fasta=$FORMATTER_FASTAS,"\
+#		"groups=$FORMATTER_GROUPS,"\
+#		"output=$AUTHOR.groups)"\
+#		> group_batch.temp.txt
+
+	group_params="(fasta=$formatter_fastas, groups=$formatter_groups,"\
+		"output=$AUTHOR.groups)"
+	mothurBatch make group $group_params > group_batch.temp.txt
 		
 	biExec mothur group_batch.temp.txt 
 	rm group_batch.temp.txt
 
 	# Move inputs and outputs back to corresponding directories
-	out_type=X
-	outPrep Y Z
+	out_type=$AUTHOR.groups
+	outPrep merged_fastas .
 	
 	# Move fastas back into their dedicated directory
 #	mv -v *.fasta merged_fastas
@@ -475,7 +473,7 @@ trimLoop(){
 	rm -v *.temp.fasta
 	
 	# Move inputs and outputs back to corresponding directories
-	out_type=*.trimmed.fasta
+	out_type=trimmed.fasta
 	outPrep merged_fastas trimmed_fastas
 #	# Create output directory
 #	mkdir trimmed_fastas
@@ -508,12 +506,12 @@ offsetTrim(){
 		PRE_OFFSET=${i//trimmed/preoffset}
 		OFFSET_TEMP=${i//trimmed/offset.temp}
 		OUTPUT=${i//trimmed/offset}
-		if ((FOR_OFFSET > 0)) && ((REV_OFFSET > 0)); then
+		if [[ $FOR_OFFSET ]] && [[ $REV_OFFSET ]]; then
 			biExec cutadapt -u $FOR_OFFSET -o $OFFSET_TEMP\
 				$i
 			biExec cutadapt -u -$REV_OFFSET -o $OUTPUT\
 				$OFFSET_TEMP
-		elif ((FOR_OFFSET > 0)); then
+		elif [[ $FOR_OFFSET ]]; then
 			biExec cutadapt -u $FOR_OFFSET -o $OUTPUT\
 				$i
 		else
@@ -585,23 +583,9 @@ phixScreen(){
 	done
 
 	# Move inputs and outputs back to corresponding directories
-	out_type+=(".merged.PhiX" ".merged.bowtie" ".screened.fasta"\
+	out_type+=("merged.PhiX" "merged.bowtie" "screened.fasta"\
 		"PhiX.accnos")
 	outPrep ${in_type%.fasta}\_fastas PhiX_fastas
-}
-
-
-groupConcat(){
-	# Concat all specified files and save to a defined output
-
-	# INPUT: $1
-	# OUTPUT: $2
-
-	for x in $1; do
-		# Concat to fasta designated with authors name (from PWD)
-		echo "$0: Adding $x to $2..."
-		cat $x >> $2
-	done
 }
 
 
@@ -612,16 +596,24 @@ mothurScreen(){
 	#		$AUTHOR.groups
 	# OUTPUT: *.good.* *.bad.*
 
+	# Concatenate PhiX screened fastas to single file
+	# (identified by $AUTHOR)
+	groupConcat "PhiX/*.screened.fasta" "$AUTHOR.concat.fasta"
+
 	pathTester mothur $MOTHUR_MODULE $MOTHUR_MOD_VER
-	SCREEN_FASTA=$AUTHOR.concat.fasta
-	SCREEN_GROUPS=$AUTHOR.groups
+	screen_fasta=$AUTHOR.concat.fasta
+	screen_groups=mothur_outputs/$AUTHOR.groups
 
 	# Remove PhiX contamination
 	if [[ -s PhiX/PhiX.accnos ]]; then
-		echo "remove.seqs(fasta=$SCREEN_FASTA,"\
-			"group=$AUTHOR.groups,"\	# Not needed by mothur?
-			"accnos=PhiX.accnos)" \
-			>> phix_batch.txt
+#		echo "remove.seqs(fasta=$SCREEN_FASTA,"\
+#			"group=$AUTHOR.groups,"\	# Not needed by mothur?
+#			"accnos=PhiX.accnos)"\
+#			>> phix_batch.txt
+		remove_params="remove.seqs(fasta=$screen_fasta,"\
+			"group=$screen_groups,"\	# Not needed by mothur?
+			"accnos=PhiX/PhiX.accnos)"\
+		mothurBatch remove seqs $remove_params > phix_batch.txt
 		biExec mothur phix_batch.txt
 		rm -v phix_batch.txt
 	else
@@ -629,11 +621,11 @@ mothurScreen(){
 	fi
 
 	# Create screening_batch.txt and execute
-	if [[ ! $SCREEN_FASTA ]] || [[ ! $SCREEN_GROUPS ]]; then
+	if [[ ! $screen_fasta ]] || [[ ! $screen_groups ]]; then
 		echo "$0: Error! Zero-length input variables detected"
 		exit 1
 	else
-		echo "screen.seqs(fasta=$SCREEN_FASTA, group=$SCREEN_GROUPS,"\
+		echo "screen.seqs(fasta=$screen_fasta, group=$screen_groups,"\
 			"minlength=200, maxlength=300, maxambig=0, maxhomop=8)"\
 			> screening_batch.txt
 		echo "summary.seqs(fasta=current, processors=$THREADS)"\
@@ -647,11 +639,11 @@ mothurScreen(){
 	fi
 
 	# TODO: See if this condensed version of the above still works
-#	if [[ ! $SCREEN_FASTA ]] || [[ ! $SCREEN_GROUPS ]]; then
+#	if [[ ! $screen_fasta ]] || [[ ! $screen_groups ]]; then
 #		echo "$0: Error! Zero-length input variables detected"
 #		exit 1
 #	else
-#		SCREEN_PARAMS+=("fasta=$SCREEN_FASTA" "group=$SCREEN_GROUPS"\
+#		SCREEN_PARAMS+=("fasta=$screen_fasta" "group=$screen_groups"\
 #			"minlength=200" "maxlength=300" "maxambig=0"\
 #			"maxhomop=8")
 #		SUMMARY_PARAMS+=("fasta=current" "processors=$THREADS")
@@ -664,10 +656,6 @@ mothurScreen(){
 #		biExec mothur screening_batch.txt 
 #		rm screening_batch.txt
 #	fi
-
-	# Move inputs and outputs back to corresponding directories
-	out_type=X
-	outPrep Y Z
 }
 
 
@@ -676,8 +664,18 @@ groupSplit(){
 	# 	necessary for vsearch later
 
 	pathTester mothur $MOTHUR_MODULE $MOTHUR_MOD_VER
-	GOOD_FASTA=$AUTHOR.concat.fasta
-	GOOD_GROUPS=$AUTHOR.groups
+	for i in *.fasta; do
+		if [[ $i =~ good ]]; then
+			GOOD_FASTA=$i
+		fi
+	done; 
+#	GOOD_FASTA=$AUTHOR.concat.fasta
+	for i in *.groups; do
+		if [[ $i =~ good ]]; then
+			GOOD_GROUPS=$i
+		fi
+	done
+#	GOOD_GROUPS=$AUTHOR.groups
 	echo "GOOD_FASTA=$GOOD_FASTA, GOOD_GROUPS=$GOOD_GROUPS"
 	
 	mothurBatch split groups "(fasta=$GOOD_FASTA, group=$GOOD_GROUPS)"\
@@ -689,7 +687,7 @@ groupSplit(){
 
 	# Rename output fastas to reasonable names
 	for i in *.fasta; do
-		if [[ "$i" =~ "concat.$AUTHOR" ]]; then
+		if [[ $i =~ concat.$AUTHOR ]]; then
 			# Remove everything up to "concat."
 			# (i.e. result: author_year_accno.fasta)
 			echo "$0: Renaming output files to"\
@@ -736,20 +734,13 @@ fastaHeaderrelabel(){
 			2>/dev/null
 	done
 
+	# Concatenate output files to single barcoded fasta
+	# (also identified by $AUTHOR)
+	#groupConcat "*bar.fasta" "$AUTHOR.barcoded.fasta"
+
 	# Move inputs and outputs back to corresponding directories
 	out_type=X
 	outPrep Y Z
-}
-
-
-garbageDay(){
-	unneeded_files+=("*.bad.*" "*.trimmed.*" "*.screened.*"\
-		"$AUTHOR\_*.fasta" "fastq-dump.err")
-	for i in ${unneeded_files[@]}; do
-		if [[ -f $i ]]; then
-			rm -v $i
-		fi
-	done
 }
 
 
@@ -806,7 +797,7 @@ pathTester(){
 biExec(){
 	# Use after pathTester, executes local executable if not in path
 	# Usage: biExec <command string>
-	if ((enPath=1)); then
+	if ((inPath=1)); then
 		echo "\$inPath = $inPath"
 		echo "$0: Using executable in path"
 		echo "$0: command: $*"
@@ -855,15 +846,17 @@ joinBy(){
 	IFS=$OIFS
 }
 
-inputNonzero(){
-	# Checks if input variables are non-zero, otherwise calls 'exit 1'
-	# 	and ends the script
 
-	for i in $@; do
-		if [[ -s $i ]]; then
-			echo "$0: Error: input file $i is zero-length"
-			exit 0
-		fi
+groupConcat(){
+	# Concat all specified files and save to a defined output
+
+	# INPUT: $1
+	# OUTPUT: $2
+
+	for x in $1; do
+		# Concat to fasta designated with authors name (from PWD)
+		echo "$0: Adding $x to $2..."
+		cat $x >> $2
 	done
 }
 
@@ -896,15 +889,25 @@ inPrep(){
 	IN_DIR=$1
 
 	# Set input files
-	in_file=()
 	for file in $IN_DIR/*; do
 		# If files in the input directory match the
 		#	input type pattern, add them to the input
 		#	file array
+		echo "Checking $file against $in_type"
 		if [[ -f $file ]] && [[ $file =~ $in_type ]]; then
 			in_file+=("${file##*/}")
 		fi
+
 	done
+
+	# Exit if input file array is still empty
+	if [[ ${#in_file[@]} == 0 ]]; then
+		echo "$0: ERROR"
+		echo "$0: No files found in input directory: $IN_DIR,"\
+			"or none matching input type: $in_type"
+		echo "$0: Exiting"
+		exit 1
+	fi
 	echo "$0: in_type = $in_type IN_DIR = $IN_DIR, in_file = ${in_file[@]}"
 
 	# Move input files to working directory
@@ -912,6 +915,7 @@ inPrep(){
 		mv -v $IN_DIR/$i .
 	done
 }
+
 
 outPrep(){
 	# Moves input and output files to corresponding directories
@@ -923,18 +927,29 @@ outPrep(){
 	OUT_DIR=$2
 	
 	# Create output directory
-	mkdir $OUT_DIR
+	if [[ ! -d $OUT_DIR ]]; then
+		mkdir $OUT_DIR
+	fi
 
 	# Add all files matching the output types to the output file array
-	out_file=()
 	for file in *; do
 		# If files in the working directory match the
 		#	output type pattern, add them to the output
 		#	file array
+		echo "checking $file against $out_type"
 		if [[ -f $file ]] && [[ $file =~ $out_type ]]; then
 			out_file+=("$file")
 		fi
 	done
+
+	# Exit if output file array is still empty
+	if [[ ${#out_file[@]} == 0 ]]; then
+		echo "$0: ERROR"
+		echo "$0: No files matching output type: $out_type"
+		echo "$0: Exiting"
+		exit 1
+	fi
+
 	echo "$0: out_type = ${out_type[@]} OUT_DIR = $OUT_DIR,"\
 		"out_file = ${out_file[@]}"
 
@@ -953,7 +968,6 @@ outPrep(){
 main(){
 	logfile=metagen.$(date +%d_%H_%M_%S).log
 	date -u > $logfile
-	sraFinder
 
 	# Download fastqs by accession number
 	if [[ $SKIP_DOWNLOAD ]]; then
@@ -992,26 +1006,10 @@ main(){
 	#groupSplit
 	#fastaHeaderrelabel
 	#groupConcat "*bar.fasta" "$AUTHOR.barcoded.fasta"
-
-	# Remove unneeded files
-#	if [[ $KEEP_FILES > 0 ]]; then
-#		echo "$0: Keeping all generated files"
-#	else
-#		garbageDay
-#	fi
-
 	date -u >> $logfile
 }
 
-#main
-phixScreen
+main
+#phixScreen
 
 shopt -u nullglob
-
-# Homework:
-# 
-# * Modify funcs to create folders for output files
-# 	(and read from folders for inputs)
-#
-# * Keep all: merged fastqs, fastas w/o primers, offset fastas,
-# 		$AUTHOR.concat.fasta, mothur outputs, barcoded fasta
