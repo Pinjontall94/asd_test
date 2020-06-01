@@ -13,17 +13,15 @@
 MOTHUR_MODULE=mothur
 MOTHUR_MOD_VER=1.39.5
 
-# Set "executable in path?" variable (for legibility)
-inPath=
-
 # Set Taxonomic database directory
 #TAXO_DB="../../databases/silva_v138/"
 
 # Define use flags
 while getopts "hld:" FLAGS; do
-	case "${FLAGS}" in
+	case $FLAGS in
 		h)
-			echo "Usage: otuGen [-h help] [-l local ] [-n threads (optional)] [-d <taxo db dir>]"
+			echo "Usage: otuGen [-h help] [-l local ]"\
+				"[-n threads (optional)] [-d <taxo db dir>]"
 			exit;;
 		l)
 			LOCAL=1
@@ -51,46 +49,29 @@ if [[ ! $THREADS ]]; then
 fi
 
 
-# ====================
-# == Util Functions ==
-# ====================
+# --------------------
+# -- Util Functions --
+# --------------------
 
 pathTester(){
 	# Test if cutadapt is in PATH, and load if necessary
 	# Usage: pathTester <executable> <module (opt.)> <version (opt.)>
 
 	if [[ $(type -t $1) ]]; then
-		echo "asdMetagen: $1 is in PATH"
-		inPath=1
+		echo "$0: $1 is in PATH"
 	elif [[ $(type -t ./$1) ]]; then
-		echo "asdMetagen: WARNING: $1 is in directory, but not PATH"
-		inPath=0
+		echo "$0: Error: $1 is in directory, but not PATH"
+		echo "$0: Please move $1 to PATH before re-running!"
+		echo "$0: Exiting..."
+		exit 1
 	elif [[ $(type -t module) ]]; then
-	    	echo "asdMetagen: $1 not found in PATH"
-		echo "asdMetagen: Running command: module load $2"
+	    	echo "$0: $1 not found in PATH"
+		echo "$0: Running command: module load $2/$3"
 		module load $2/$3
-	    	inPath=1
 	else
-		echo "asdMetagen: Error! No module, local executable, or path"\
+		echo "$0: Error! No module, local executable, or path"\
 			"executable found. Aborting..."
 		exit 1
-	fi
-}
-
-
-biExec(){
-	# Use after pathTester, executes local executable if not in path
-	# Usage: biExec <command string>
-	if ((inPath=1)); then
-		echo "\$inPath = $inPath"
-		echo "asdMetagen: Using executable in path"
-		echo "asdMetagen: command: $*"
-		$*
-	else
-		echo "\$inPath = $inPath"
-		echo "asdMetagen: Using local executable"
-		echo "asdMetagen: command: $*"
-		./$*
 	fi
 }
 
@@ -127,8 +108,7 @@ derep(){
 	# 	via the --minuniquesize command; setting this to 2 would 
 	# 	generate OTUs represented by 2 or more sequences"
 	
-	pathTester vsearch
-	biExec vsearch --derep_fulllength metaan.barcoded.fasta\
+	vsearch --derep_fulllength metaan.barcoded.fasta\
 		--sizein --sizeout --minuniquesize 2\
 		--output metaan.derep.fasta
 }
@@ -143,16 +123,14 @@ clusterOTUs(){
 	#	97% cutoff (97% or more identity among sequences in an OTU). 
 	#	Set threads to 40 in this example. This will need to be changed."
 
-	pathTester vsearch
-	biExec vsearch --cluster_fast metaan.derep.fasta --id 0.97\
+	vsearch --cluster_fast metaan.derep.fasta --id 0.97\
 		--centroids metaan.otus.fasta --uc metaan.otus.uc\
 		--relabel OTU_ --sizein --sizeout --threads $THREADS
 }
 
 chimeraScreen(){
 	# Screen for chimeric sequences
-	pathTester vsearch
-	biExec vsearch --uchime_denovo metaan.otus.fasta --abskew 1.5\
+	vsearch --uchime_denovo metaan.otus.fasta --abskew 1.5\
 		--nonchimeras metaan.otus.nc.fasta --fasta_width 0
 }
 
@@ -171,15 +149,14 @@ taxoClassify(){
 		"taxonomy=metaan.otus.nc.nr_v138.wang.taxonomy, taxon=unknown")
 	mothurBatch classify seqs "${TAXO_PARAMS[*]}" > taxo_batch.txt
 	mothurBatch remove lineage "${LINEAGE_PARAMS[*]}" >> taxo_batch.txt
-	biExec mothur taxo_batch.txt 
+	mothur taxo_batch.txt 
 	rm taxo_batch.txt
 }
 
 
 mapOTUs(){
 	# Maps OTUs against reads and converts them to an OTU table
-	pathTester vsearch
-	biExec vsearch --usearch_global metaan.barcoded.fasta\
+	vsearch --usearch_global metaan.barcoded.fasta\
 		-db metaan.otus.nc.pick.fasta\
 		--uc metaan.otus.nc.readmap.uc --id 0.97\
 		--strand plus --threads $THREADS &
