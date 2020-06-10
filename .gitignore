@@ -10,3 +10,5 @@ mothur
 mothur.*.logfile
 nohup.*
 original/
+otutest/
+next_two_accnos
