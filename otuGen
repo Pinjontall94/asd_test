@@ -1,6 +1,10 @@
 #!/bin/bash
-# otuGen -- a bash script to generate OTU tables from a barcoded, 
-#		screened fasta file.
+# otuGen -- A bash script to generate OTU tables from a barcoded,
+#		screened fasta file. Use in a directory populated with files
+#		with a ".barcoded.fasta" extension, as well as
+#		create_otu_table_from_uc_file.py
+#
+# Usage: otuGen -d <taxo_db>
 
 # AUTHOR: Sam Johnson
 # LICENSE: GNU Affero General Public License 
@@ -13,16 +17,28 @@
 MOTHUR_MODULE=mothur
 MOTHUR_MOD_VER=1.39.5
 
-# Set Taxonomic database directory
-#TAXO_DB="../../databases/silva_v138/"
+usage(){
+	echo "Usage: $0 [options] -d <taxo_db_dir>"
+	echo "	-h : help"
+	echo "	-l : local mode (restricts default thread count)"
+	echo "	-d <taxonomic_database_directory>"\
+		": Set taxonomic databases to classify OTUs [REQUIRED]"
+	echo "    Ex: $0 -ld silva_v138_mothur"
+}
+
+# If no arguments, print usage statement and exit
+if (($# == 0)); then
+	usage
+	exit
+fi
 
 # Define use flags
-while getopts "hld:" FLAGS; do
-	case $FLAGS in
+while getopts ":hld:" FLAGS; do
+	case "$FLAGS" in
 		h)
-			echo "Usage: otuGen [-h help] [-l local ]"\
-				"[-n threads (optional)] [-d <taxo db dir>]"
-			exit;;
+			usage
+			exit
+			;;
 		l)
 			LOCAL=1
 			;;
@@ -31,6 +47,10 @@ while getopts "hld:" FLAGS; do
 			;;
 		d)
 			TAXO_DB=$OPTARG
+			;;
+		:)
+			echo "$0: Option -$OPTARG requires an argument"
+			exit
 			;;
 	esac
 done
@@ -159,7 +179,7 @@ mapOTUs(){
 	vsearch --usearch_global metaan.barcoded.fasta\
 		-db metaan.otus.nc.pick.fasta\
 		--uc metaan.otus.nc.readmap.uc --id 0.97\
-		--strand plus --threads $THREADS &
+		--strand plus --threads $THREADS
 }
 
 
@@ -187,5 +207,4 @@ main(){
 	mapOTUs
 	readmap2file
 }
-#main
-readmap2file
+main
