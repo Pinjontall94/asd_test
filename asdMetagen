@@ -490,8 +490,7 @@ phixScreen(){
 			grep -Eo "[A-Z]{3,6}[0-9]+\.[0-9]+" *.merged.bowtie \
 			| awk -F: '{ print $2 }' >> PhiX.accnos
 		else
-			echo "$0: All *.merged.PhiX are empty,"\
-				"skipping PhiX.accnos generation"
+			rm $i
 		fi
 	done
 
@@ -499,10 +498,15 @@ phixScreen(){
 	# (identified by $AUTHOR)
 	groupConcat "*.screened.fasta" $AUTHOR.concat.fasta
 
+	# Create output folder for screened fastas (separate from other PhiX outputs)
+	mkdir screened_fastas && mv *.screened.fasta screened_fastas
+
+	# Remove unneeded ".bowtie" outs
+	rm *.merged.bowtie
+
 	# Move inputs and outputs back to corresponding directories
-	out_type=("merged.PhiX" "merged.bowtie" "screened.fasta"\
-		"PhiX.accnos")
-	outPrep ${in_type%.fasta}\_fastas PhiX_fastas
+	out_type=("merged.PhiX" "merged.bowtie" "PhiX.accnos")
+	outPrep ${in_type%.fasta}\_fastas PhiX_outs
 }
 
 
@@ -518,7 +522,7 @@ mothurScreen(){
 	screen_groups=$AUTHOR.groups
 
 	# Remove PhiX contamination
-	if [[ -s PhiX/PhiX.accnos ]]; then
+	if [[ -s PhiX_outs/PhiX.accnos ]]; then
 		remove_params=("fasta=$screen_fasta,"\
 			"group=$screen_groups,"\	# Not needed by mothur?
 			"accnos=PhiX/PhiX.accnos")
@@ -605,9 +609,6 @@ groupSplit(){
 			echo "$0: Renaming output files to"\
 				"format: author_year_accno.fasta"
 			mv -v $i ${i#*good.}
-		else
-			echo ">>$i doesn't match type '.$AUTHOR'"
-			continue
 		fi
 	done
 
@@ -655,6 +656,16 @@ fastaHeaderrelabel(){
 	outPrep split_fastas relabeled_fastas
 }
 
+
+garbageDay(){
+	# Delete unneeded outputs and directories to clean up final output
+
+	rm $AUTHOR.*.bad.*
+
+	# Remove PhiX_outs entirely, if it's empty
+	# (equivalent to "rmdir PhiX_outs" without unnecessary errors)
+	find PhiX_outs -maxdepth 0 -empty -exec rmdir {} \;
+}
 
 # --------------------
 # -- Util Functions --
@@ -841,17 +852,18 @@ outPrep(){
 		done
 	done
 
-	# Exit if output file array is still empty
-	if [[ ${#out_file[@]} == 0 ]]; then
-		echo "$0: ERROR"
-		echo "$0: No files matching output type: $out_type"
-		echo "$0: Exiting"
-		exit 1
+	# Move outputs to corresponding directories
+	if [[ ${#out_file[@]} != 0 ]]; then
+		mv -v ${out_file[*]} $OUT_DIR
+	else
+		# Print warning if output file array is still empty
+		echo "$0: Warning: No files matching output types: ${out_type[@]}"
 	fi
 
-	# Move inputs and outputs to corresponding directories
+	# Move input files back to corresponding directories
 	mv -v ${in_file[*]} $IN_DIR
-	mv -v ${out_file[*]} $OUT_DIR
+
+
 	
 	# Reset input and output arrays
 	unset in_file out_file in_type out_type
@@ -900,6 +912,7 @@ main(){
 	mothurScreen
 	groupSplit
 	fastaHeaderrelabel
+	garbageDay
 	date -u >> $logfile
 }
 
