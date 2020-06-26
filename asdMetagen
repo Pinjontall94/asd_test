@@ -3,7 +3,7 @@
 #			metagenomic analysis. 
 
 # AUTHOR: Sam Johnson
-# LICENSE: GNU Affero General Public License 
+# LICENSE: AGPL-3.0-or-later
 #	https://www.gnu.org/licenses/agpl-3.0.html
 # DEPENDS: poppler-utils v0.87.0-1, bash v5.0.016-1, bbmap v38.00, mothur v1.39.5, 
 # 		sratoolkit v2.10.5, cutadapt v2.8, bowtie2 v2.3.5.1

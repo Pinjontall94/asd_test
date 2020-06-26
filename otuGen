@@ -7,7 +7,7 @@
 # Usage: otuGen -d <taxo_db>
 
 # AUTHOR: Sam Johnson
-# LICENSE: GNU Affero General Public License 
+# LICENSE: AGPL-3.0-or-later
 #	https://www.gnu.org/licenses/agpl-3.0.html
 # DEPENDS: bash v5.0.016-1, mothur v1.39.5, vsearch v1.39.5,
 #		python v2.7, create_otu_table_from_uc_file.py
