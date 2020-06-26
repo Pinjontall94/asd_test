@@ -1,6 +1,7 @@
 # screening_batch.txt
 # Note: RUN AFTER: --- ~/code/shell/bioinf/groupFormatter.sh 
 #	RUN BEFORE: -- ~/code/shell/bioinf/phix.sh
+# LICENSE: AGPL-3.0-or-later
 
 
 screen.seqs(fasta=merged.pick.fasta, group=merged.pick.groups, minlength=200, maxlength=300, maxambig=0, maxhomop=8)

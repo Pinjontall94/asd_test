@@ -4,6 +4,7 @@
 # Description: Scans current directory for .fasta files, and
 #              formats them for use with the R package Mothur's
 #              'make.group()' command
+# LICENSE: AGPL-3.0-or-later
 
 # NOTE: RUN AFTER: --- q2a_reformat.sh 
 # 	RUN BEFORE: -- [mothur merge script]

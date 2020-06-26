@@ -4,6 +4,7 @@
 # 	directory.
 
 # Deps: flash2
+# LICENSE: AGPL-3.0-or-later
 # NOTE: RUN AFTER: --- srr_munch.sh
 #	RUN BEFORE: -- q2a_reformat.sh
 

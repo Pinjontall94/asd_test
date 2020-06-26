@@ -2,6 +2,8 @@
 # 16S_extractor.sh
 # Description: A tool that takes an SraRunTable file from NCBI and outputs all
 # 		SRR's that contain "16S"
+#
+# LICENSE: AGPL-3.0-or-later
 
 # INPUT: SraRunTable.csv
 # OUTPUT: 16S/,*.fastq

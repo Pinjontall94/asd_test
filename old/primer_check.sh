@@ -1,4 +1,5 @@
 #!/bin/sh
+# LICENSE: AGPL-3.0-or-later
 
 # Quick and dirty script to see which of these unmerged Hewavitharana seqs 
 # DO NOT have the reverse primer pattern listed in the article

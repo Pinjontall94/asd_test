@@ -5,6 +5,7 @@
 # 	$PWD/phix_db/ and screens for PhiX contamination
 
 # Deps: bowtie2
+# LICENSE: AGPL-3.0-or-later
 # Note: RUN AFTER: --- mothur > ~/code/shell/bioinf/screening_batch.txt
 #	RUN BEFORE: -- mothur > ~/code/shell/bioinf/phix_removal_batch.txt
 # INPUT: samples.trim.contigs.fasta

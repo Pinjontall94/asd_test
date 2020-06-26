@@ -3,6 +3,8 @@
 
 # Takes the primer patterns in the directory above 
 # $(pwd), inputs to cutadapt, and loops through all fasta # files in $(pwd)
+#
+# LICENSE: AGPL-3.0-or-later
 
 # INPUT: *primers.txt,*.fasta
 # OUTPUT: *.trimmed.fasta

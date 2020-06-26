@@ -3,6 +3,7 @@
 # q2a_reformat.sh
 
 # DESCRIPTION: Reformats all fastq files in current directory to fasta
+# LICENSE: AGPL-3.0-or-later
 
 # Deps: bbtools 'reformat' tool
 

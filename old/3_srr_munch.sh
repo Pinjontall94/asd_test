@@ -5,6 +5,8 @@
 # 	nicely formatting them with bbtools' reformat.sh (for now, with manual
 #	read number relabeling).
 # usage: srr_munch.sh <sra_list.txt>
+#
+# LICENSE: AGPL-3.0-or-later
 
 # INPUT: SRR_Acc_List.txt
 # OUTPUT: *.fastq
