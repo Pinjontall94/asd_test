@@ -45,7 +45,7 @@ usage(){
 	echo "	-n <integer> : set number of threads"
 	echo "	-p <directory> : set PhiX db for bowtie2"\
 		"(./PhiX_bowtie_db/phix_db by default)"
-	echo "	-d \"<delimiter>\" : set delimiter for run table (Note the double quotes!)"
+	echo "	-d \"<delimiter>\" : set custom delimiter for run table (Note the double quotes!)"
 	echo "	-c <integer> : set column number for run table accnos"
 	echo "	-t <integer> : set offset on 5' end (in nucleotides)"
 	echo "	-T <integer> : set offset on 3' end"
