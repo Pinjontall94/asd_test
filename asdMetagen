@@ -172,8 +172,8 @@ srrMunch(){
 	pathTester fastq-dump $SRA_MODULE $SRA_MOD_VER
 	while read accno; do
 		fastq-dump --split-3 --gzip $accno 2>>fastq-dump.err
-		gzip -d $accno*.fastq.gz
-	done <$READ_LIST
+	done < $READ_LIST
+	gzip -d *.fastq.gz
 	[[ ! -f 16S_list.txt.temp ]] || rm -v 16S_list.txt.temp
 
 	# TODO: Parameterize fastq-dump call?
