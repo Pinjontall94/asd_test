@@ -131,6 +131,16 @@ srrMunch(){
 	# Deps: fastq-dump from NCBI SRA Toolkit
 
 	# Check Run Table first for a list of 16S seqs
+	# TODO: add awk script to extract the correct column by regex
+	#    maybe something like:
+
+#	awk 'FNR==2 {
+#		for (i = 1; i <= NF; i++){
+#			if ($i ~ ".RR[0-9]+"){target=$i}
+#		}
+#		print $target
+#	}' $RUNTABLE
+
 	[[ $COLUMN ]] || COLUMN=1
 	if [[ $DELIMITER ]]; then
 		echo "$0: Running command:"
@@ -311,7 +321,11 @@ q2aReformat(){
 	in_type=fastq
 
 	# Move input files to working directory
-	inPrep merged_fastqs
+	if [[ $SKIP_MERGE ]]; then
+		inPrep fastqs
+	else
+		inPrep merged_fastqs
+	fi
 
 	pathTester reformat.sh $BBMAP_MODULE $BBMAP_MOD_VER
 
