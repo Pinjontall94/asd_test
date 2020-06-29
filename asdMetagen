@@ -893,7 +893,10 @@ main(){
 
 	# Download fastqs by accession number
 	if [[ $SKIP_DOWNLOAD ]]; then
-		echo "Skipping fastq re-download"
+		echo "$0: Skipping fastq re-download"
+		echo "$0: Moving fastqs to fastq directory for pipeline compatibility"
+		[[ -d fastqs ]] || mkdir fastqs
+		mv *.fastq fastqs
 	else
 		srrMunch 
 	fi
@@ -902,10 +905,11 @@ main(){
 	if [[ $SKIP_MERGE ]]; then
 		#TODO: Clean this up so it's not in main
 		echo "$0: Skipping merge stage"
-		echo "$0: Renaming fastqs for pipeline compatibility"
-		for i in *.fastq; do
+		echo "$0: Renaming fastqs and fastq directory for pipeline compatibility"
+		for i in fastqs/*.fastq; do
 			mv $i ${i%.fastq}.merged.fastq
 		done
+		mv fastqs merged_fastqs
 	else
 		mergeSeqs
 	fi
