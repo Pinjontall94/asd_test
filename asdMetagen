@@ -134,43 +134,28 @@ srrMunch(){
 	# TODO: check that the following snippet accurately grabs the accession
 	#    16S accession numbers from the correct column
 
-#	# Determine Run Table delimiter (commas or tabs)
-#	comma_count=$(grep -o "," SraRunTable.txt | wc -c)
-#	tab_count=$(grep -o "\t" SraRunTable.txt | wc -c)
-#	if ((comma_count > tab_count)); then
-#		DELIMITER=","
-#	elif ((comma_count < tab_count)); then
-#		DELIMITER="\t"
-#	else
-#		echo "$0: Warning, Run Table not comma- or tab-separated"
-#		echo "$0: Defaulting to whitespace..."
-#		DELIMITER=" "
-#	fi
-#
-#	# Extract all 16S accession numbers (if determinable)
-#	awk -F $DELIMITER '
-#		NR==2 {
-#			for(i=1;i<=NF;i++){
-#				if($i ~ "[A-Z]RR[0-9]{4,6}"){ target=i }
-#			}
-#		}
-#		NR>1 && /16S/ { print $target }
-#	' SraRunTable.txt > 16S_list.txt.temp
-
-	[[ $COLUMN ]] || COLUMN=1
-	if [[ $DELIMITER ]]; then
-		echo "$0: Running command:"
-		echo -e "awk -F $DELIMITER -v c=$COLUMN '/16S/ { print $c }'"\
-			"$RUNTABLE > 16S_list.txt.temp"
-		awk -F $DELIMITER -v c=$COLUMN '/16S/ { print $c }' $RUNTABLE\
-			> 16S_list.txt.temp
+	# Determine Run Table delimiter (commas or tabs)
+	comma_count=$(grep -o "," SraRunTable.txt | wc -c)
+	tab_count=$(grep -o "\t" SraRunTable.txt | wc -c)
+	if ((comma_count > tab_count)); then
+		DELIMITER=","
+	elif ((comma_count < tab_count)); then
+		DELIMITER="\t"
 	else
-		echo "$0: Running command:"
-		echo "awk -v c=$COLUMN '/16S/ { print $c }'"\
-			"$RUNTABLE > 16S_list.txt.temp"
-		awk -v c=$COLUMN '/16S/ { print $c }' $RUNTABLE\
-			> 16S_list.txt.temp
+		echo "$0: Warning, Run Table not comma- or tab-separated"
+		echo "$0: Defaulting to whitespace..."
+		DELIMITER=" "
 	fi
+
+	# Extract all 16S accession numbers (if determinable)
+	awk -F $DELIMITER '
+		NR==2 {
+			for(i=1;i<=NF;i++){
+				if($i ~ "[A-Z]RR[0-9]{4,6}"){ target=i }
+			}
+		}
+		NR>1 && /16S/ { print $target }
+		' SraRunTable.txt > 16S_list.txt.temp
 
 	# Set which list to loop fastq-dump over
 	if [[ -s 16S_list.txt.temp ]]; then
@@ -219,65 +204,64 @@ srrMunch(){
 }
 
 
-16sExtractor(){
-	# Description: takes an SraRunTable file from NCBI and outputs all
-	# 		SRR's that contain "16S"
-
-	# INPUT: fastq-dump, $RUNTABLE, *.fastq
-	# OUTPUT: filter/, *.fastq
-
-	# Set input type
-	in_type=X
-
-	# Move input files to working directory
-	inPrep Y
-
-	echo "$0: Filtering out non-16S fastqs by runtable metadata..."
-
-	
-	mkdir 16S_temp filter
-	if [[ $COLUMN ]]; then
-		awk -v c=$COLUMN '/16S/ { print $c }' $RUNTABLE \
-			> 16S_list.txt.temp
-	else
-		awk '/16S/ { print $1 }' $RUNTABLE \
-			> 16S_list.txt.temp
-	fi
-	if [[ -s 16S_list.txt.temp ]]; then
-		# Create list of 16S seqs from the runtable
-		while read line; do
-			#echo "$line.fastq"
-			eval mv -v fastqs/$line*.fastq 16S_temp # Move 16S seqs to temp dir
-		done < 16S_list.txt.temp
-		# Move the non-match seqs to the filter, or remove filter if all seqs match
-		filter_array=()
-		while IFS= read -r -d $'\0' line; do
-			filter_array+=("$line")
-		done < <(find fastqs -maxdepth 1 -name "*.fastq" -print0)
-		if [[ ${#filter_array[@]} > 0 ]]; then
-			# move any remaining fastqs to filter
-			mv -v fastqs/* filter
-		else
-			# ...or delete filter/ if there aren't any left
-			rmdir filter
-		fi
-	else
-		echo "$0: awk filter failed to find 16S seqs,"\
-			"leaving filtering duties to cutadapt.."
-	fi
-
-	rm -v 16S_list.txt.temp
-	#mv -v 16S_temp/* fastqs && rmdir 16S_temp
-
-	# Move inputs and outputs back to corresponding directories
-	out_type=X
-	outPrep Y Z
-}
+#16sExtractor(){
+#	# Description: takes an SraRunTable file from NCBI and outputs all
+#	# 		SRR's that contain "16S"
+#
+#	# INPUT: fastq-dump, $RUNTABLE, *.fastq
+#	# OUTPUT: filter/, *.fastq
+#
+#	# Set input type
+#	in_type=X
+#
+#	# Move input files to working directory
+#	inPrep Y
+#
+#	echo "$0: Filtering out non-16S fastqs by runtable metadata..."
+#
+#	
+#	mkdir 16S_temp filter
+#	if [[ $COLUMN ]]; then
+#		awk -v c=$COLUMN '/16S/ { print $c }' $RUNTABLE \
+#			> 16S_list.txt.temp
+#	else
+#		awk '/16S/ { print $1 }' $RUNTABLE \
+#			> 16S_list.txt.temp
+#	fi
+#	if [[ -s 16S_list.txt.temp ]]; then
+#		# Create list of 16S seqs from the runtable
+#		while read line; do
+#			#echo "$line.fastq"
+#			eval mv -v fastqs/$line*.fastq 16S_temp # Move 16S seqs to temp dir
+#		done < 16S_list.txt.temp
+#		# Move the non-match seqs to the filter, or remove filter if all seqs match
+#		filter_array=()
+#		while IFS= read -r -d $'\0' line; do
+#			filter_array+=("$line")
+#		done < <(find fastqs -maxdepth 1 -name "*.fastq" -print0)
+#		if [[ ${#filter_array[@]} > 0 ]]; then
+#			# move any remaining fastqs to filter
+#			mv -v fastqs/* filter
+#		else
+#			# ...or delete filter/ if there aren't any left
+#			rmdir filter
+#		fi
+#	else
+#		echo "$0: awk filter failed to find 16S seqs,"\
+#			"leaving filtering duties to cutadapt.."
+#	fi
+#
+#	rm -v 16S_list.txt.temp
+#	#mv -v 16S_temp/* fastqs && rmdir 16S_temp
+#
+#	# Move inputs and outputs back to corresponding directories
+#	out_type=X
+#	outPrep Y Z
+#}
 
 
 mergeSeqs(){
-	# DESCRIPTION: A simple script that runs bbmerge.sh to merge all fastqs in the current
-	# 	directory.
+	# merge all fastqs in the current directory with bbmerge.sh
 
 	# INPUT: sufRegex(), bbmerge.sh(), fastqs/
 	# OUTPUT: merged_fastqs/
