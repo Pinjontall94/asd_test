@@ -131,15 +131,31 @@ srrMunch(){
 	# Deps: fastq-dump from NCBI SRA Toolkit
 
 	# Check Run Table first for a list of 16S seqs
-	# TODO: add awk script to extract the correct column by regex
-	#    maybe something like:
+	# TODO: check that the following snippet accurately grabs the accession
+	#    16S accession numbers from the correct column
 
-#	awk 'FNR==2 {
-#		for (i = 1; i <= NF; i++){
-#			if ($i ~ ".RR[0-9]+"){target=$i}
+#	# Determine Run Table delimiter (commas or tabs)
+#	comma_count=$(grep -o "," SraRunTable.txt | wc -c)
+#	tab_count=$(grep -o "\t" SraRunTable.txt | wc -c)
+#	if ((comma_count > tab_count)); then
+#		DELIMITER=","
+#	elif ((comma_count < tab_count)); then
+#		DELIMITER="\t"
+#	else
+#		echo "$0: Warning, Run Table not comma- or tab-separated"
+#		echo "$0: Defaulting to whitespace..."
+#		DELIMITER=" "
+#	fi
+#
+#	# Extract all 16S accession numbers (if determinable)
+#	awk -F $DELIMITER '
+#		NR==2 {
+#			for(i=1;i<=NF;i++){
+#				if($i ~ "[A-Z]RR[0-9]{4,6}"){ target=i }
+#			}
 #		}
-#		print $target
-#	}' $RUNTABLE
+#		NR>1 && /16S/ { print $target }
+#	' SraRunTable.txt > 16S_list.txt.temp
 
 	[[ $COLUMN ]] || COLUMN=1
 	if [[ $DELIMITER ]]; then
