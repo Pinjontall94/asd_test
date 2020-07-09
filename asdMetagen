@@ -37,16 +37,15 @@ BOWTIE2_MOD_VER=2.3.4.1
 
 # Define usage statement
 usage(){
-	echo "Usage: $0 -hlDMnpdctT"\
+	echo "Usage: $0 -hldmnptT"\
 		"-f <forward primer> -r <revcomp'd reverse primer>"
 	echo "	-h : help"
 	echo "	-l : local mode (restricts default thread count)"
-	echo "	-DM : skip 'Download fastqs' | 'Merge fastqs'"
+	echo "	-d : download fastqs from NCBI, reading from Run Table"
+	echo "	-m : skip 'Merge fastqs'"
 	echo "	-n <integer> : set number of threads"
 	echo "	-p <directory> : set PhiX db for bowtie2"\
 		"(./PhiX_bowtie_db/phix_db by default)"
-	echo "	-d \"<delimiter>\" : set custom delimiter for run table (Note the double quotes!)"
-	echo "	-c <integer> : set column number for run table accnos"
 	echo "	-t <integer> : set offset on 5' end (in nucleotides)"
 	echo "	-T <integer> : set offset on 3' end"
 	echo "	NOTE: Ommitting forward or reverse primer will cancel"
@@ -55,7 +54,7 @@ usage(){
 }
 
 # Define use flags
-while getopts "hlDMn:p:d:c:t:T:f:r:" FLAGS; do
+while getopts ":hldmn:p:t:T:f:r:" FLAGS; do
 	case "${FLAGS}" in
 		h)
 			usage
@@ -64,10 +63,10 @@ while getopts "hlDMn:p:d:c:t:T:f:r:" FLAGS; do
 		l)
 			LOCAL=1
 			;;
-		D)
-			SKIP_DOWNLOAD=1
+		d)
+			DOWNLOAD_ONLY=1
 			;;
-		M)
+		m)
 			SKIP_MERGE=1
 			;;
 		n)
@@ -77,14 +76,6 @@ while getopts "hlDMn:p:d:c:t:T:f:r:" FLAGS; do
 		p)
 			PHIX_DB=$OPTARG
 			echo "PHIX_DB = $PHIX_DB"
-			;;
-		d)
-			DELIMITER=$OPTARG
-			echo -e "DELIMITER = $DELIMITER"
-			;;
-		c)
-			COLUMN=$OPTARG
-			echo "Run Table accession number column: $COLUMN"
 			;;
 		t)
 			FOR_OFFSET=$OPTARG
@@ -102,10 +93,51 @@ while getopts "hlDMn:p:d:c:t:T:f:r:" FLAGS; do
 			REVPRIME=$OPTARG
 			echo "REVPRIME = $REVPRIME"
 			;;
+		\?)
+			usage
+			exit 1
+			;;
+		*)
+			usage
+			exit 1
+			;;
 		esac
 done
 
-# Set available threads 
+# Check for necessary flags before continuing
+if [[ $# == 0 ]]; then
+	usage
+	exit 1
+fi
+
+# Check working directory for pre-existing fastq files
+while IFS= read -r -d $'\0' line; do
+	  fastqs_in_pwd+=("$line")
+done < <(find . -maxdepth 1 -iname "*.fastq" -print0)
+
+if [[ ! $DOWNLOAD_ONLY ]]; then
+	if [[ ! -d fastqs ]] && [[ ${#fastqs_in_pwd[@]} == 0 ]]; then
+		echo "$0: ERROR: No 'fastq' folder or pre-existing fastqs found!"
+		echo "Please ensure both 'SraRunTable.txt' and 'SRR_Acc_List.txt'"\
+			"are present, and run '$0 -d'"
+		echo "Exiting..."
+		exit 1
+	elif [[ ${#fastqs_in_pwd[@]} > 0 ]]; then
+		echo "$0: ERROR: Pre-existing fastqs found in dir: ${PWD##*/}!"
+		echo "Please move all fastqs to 'fastqs' dir before re-running"\
+			"${0#./} without the '-d' flag"
+		echo "Exiting..."
+		exit 1
+	elif [[ ! $FORPRIME ]] || [[ ! $REVPRIME ]]; then
+		echo "$0: ERROR: Primers missing! Please specify primers with"\
+			"the '-f' and '-r' flags before re-running"
+		echo "Exiting..."
+		exit 1
+	fi
+fi
+
+
+   # Set available threads
 if [[ $LOCAL ]]; then
 	THREAD_DEFAULT=$(( $(nproc) - 2 ))
 else
@@ -138,27 +170,36 @@ srrMunch(){
 	comma_count=$(grep -o "," SraRunTable.txt | wc -c)
 	tab_count=$(grep -o "\t" SraRunTable.txt | wc -c)
 	if ((comma_count > tab_count)); then
+		echo "$comma_count commas > $tab_count tabs"
+		echo "$0: Setting delimiter to commas"
 		DELIMITER=","
 	elif ((comma_count < tab_count)); then
+		echo "$comma_count commas < $tab_count tabs"
+		echo "$0: Setting delimiter to tabs"
 		DELIMITER="\t"
 	else
 		echo "$0: Warning, Run Table not comma- or tab-separated"
-		echo "$0: Defaulting to whitespace..."
+		echo "Defaulting to whitespace..."
 		DELIMITER=" "
 	fi
 
 	# Extract all 16S accession numbers (if determinable)
-	awk -F $DELIMITER '
+	awk -F "$DELIMITER" '
+		# Loop over column 2, set column with valid accession number as target
 		NR==2 {
 			for(i=1;i<=NF;i++){
 				if($i ~ "[A-Z]RR[0-9]{4,6}"){ target=i }
 			}
 		}
+
+		# Print all entries in the target column if they have '16S' in their row
+		#    (skipping the header row, of course)
 		NR>1 && /16S/ { print $target }
 		' SraRunTable.txt > 16S_list.txt.temp
 
 	# Set which list to loop fastq-dump over
 	if [[ -s 16S_list.txt.temp ]]; then
+		echo "$0: awk filter successful, setting 16S_list.txt.temp to \$READ_LIST"
 		READ_LIST=16S_list.txt.temp	
 	else
 		echo "$0: awk filter failed to find 16S seqs,"\
@@ -166,7 +207,7 @@ srrMunch(){
 		READ_LIST=$ACCESSION_LIST
 	fi
 
-	echo "$0: Looping through $READ_LIST with sratoolkit and" \
+	echo "Looping through $READ_LIST with sratoolkit and" \
 		"unpacking fastqs..."
 
 	# Loop fastq-dump over Accession Number list
@@ -177,8 +218,7 @@ srrMunch(){
 	gzip -d *.fastq.gz
 	[[ ! -f 16S_list.txt.temp ]] || rm -v 16S_list.txt.temp
 
-	# TODO: Parameterize fastq-dump call?
-	# Parse fastq-dump.err files for fastq-dump download errors, 
+	# Parse fastq-dump.err files for fastq-dump download errors,
 	# store matching accession numbers in array
 	fastq_err=()
 	while IFS= read -r -d $'\0' line; do
@@ -194,7 +234,7 @@ srrMunch(){
 			gzip -d $accno*.fastq.gz
 		done
 	else
-		echo "$0: No download errors found for fastq-dump" 
+		echo "No download errors found for fastq-dump"
 		rm -v fastq-dump.err
 	fi
 
@@ -202,62 +242,6 @@ srrMunch(){
 	mkdir fastqs
 	mv -v *.fastq fastqs
 }
-
-
-#16sExtractor(){
-#	# Description: takes an SraRunTable file from NCBI and outputs all
-#	# 		SRR's that contain "16S"
-#
-#	# INPUT: fastq-dump, $RUNTABLE, *.fastq
-#	# OUTPUT: filter/, *.fastq
-#
-#	# Set input type
-#	in_type=X
-#
-#	# Move input files to working directory
-#	inPrep Y
-#
-#	echo "$0: Filtering out non-16S fastqs by runtable metadata..."
-#
-#	
-#	mkdir 16S_temp filter
-#	if [[ $COLUMN ]]; then
-#		awk -v c=$COLUMN '/16S/ { print $c }' $RUNTABLE \
-#			> 16S_list.txt.temp
-#	else
-#		awk '/16S/ { print $1 }' $RUNTABLE \
-#			> 16S_list.txt.temp
-#	fi
-#	if [[ -s 16S_list.txt.temp ]]; then
-#		# Create list of 16S seqs from the runtable
-#		while read line; do
-#			#echo "$line.fastq"
-#			eval mv -v fastqs/$line*.fastq 16S_temp # Move 16S seqs to temp dir
-#		done < 16S_list.txt.temp
-#		# Move the non-match seqs to the filter, or remove filter if all seqs match
-#		filter_array=()
-#		while IFS= read -r -d $'\0' line; do
-#			filter_array+=("$line")
-#		done < <(find fastqs -maxdepth 1 -name "*.fastq" -print0)
-#		if [[ ${#filter_array[@]} > 0 ]]; then
-#			# move any remaining fastqs to filter
-#			mv -v fastqs/* filter
-#		else
-#			# ...or delete filter/ if there aren't any left
-#			rmdir filter
-#		fi
-#	else
-#		echo "$0: awk filter failed to find 16S seqs,"\
-#			"leaving filtering duties to cutadapt.."
-#	fi
-#
-#	rm -v 16S_list.txt.temp
-#	#mv -v 16S_temp/* fastqs && rmdir 16S_temp
-#
-#	# Move inputs and outputs back to corresponding directories
-#	out_type=X
-#	outPrep Y Z
-#}
 
 
 mergeSeqs(){
@@ -276,7 +260,7 @@ mergeSeqs(){
 
 	pathTester bbmerge.sh $BBMAP_MODULE $BBMAP_MOD_VER
 
-	echo "$0: Checking forward and reverse fastq read counts"\
+	echo "Checking forward and reverse fastq read counts"\
 		"prior to merging"
 
 	# Merge all _1 & _2 fastqs
@@ -294,9 +278,9 @@ mergeSeqs(){
 			R_READ_NUM=$(grep -c "@$READ_NAME" $REV)
 	
 			if [[ $F_READ_NUM == $R_READ_NUM ]]; then
-				echo "$0: Read counts match; "\
+				echo "Read counts match; "\
 					"Now merging: $i and $REV"
-				echo "$0: Merge out file: $OUT_FILE"
+				echo "Merge out file: $OUT_FILE"
 				bbmerge.sh in1="$i" in2="$REV" out="$OUT_FILE"
 			else
 				echo "Mismatch found, delete reads for $READ_NAME and "\
@@ -329,7 +313,7 @@ q2aReformat(){
 
 	pathTester reformat.sh $BBMAP_MODULE $BBMAP_MOD_VER
 
-	echo "$0: Reformatting merged fastqs files to fasta format..."
+	echo "Reformatting merged fastqs files to fasta format..."
 	for i in ${in_file[@]}; do
 		reformat.sh in=$i out=${i%.fastq}.fasta
 	done
@@ -386,20 +370,20 @@ trimLoop(){
 	inPrep merged_fastas
 	pathTester cutadapt $CUTADAPT_MODULE $CUTADAPT_MOD_VER
 
-	echo "$0: Trimming primers..."
-	echo "$0: FORPRIME = $FORPRIME \t REVPRIME = $REVPRIME"
+	echo "Trimming primers..."
+	echo "FORPRIME = $FORPRIME \t REVPRIME = $REVPRIME"
 
 	for i in ${in_file[@]}; do
 		m=${i%.fasta}
 		if [[ $FORPRIME ]]; then
-			echo "$0: FORPRIME = $FORPRIME"
+			echo "FORPRIME = $FORPRIME"
 			cutadapt -g $FORPRIME\
 				-o $m.temp.fasta $i\
 				--discard-untrimmed
 		fi
 
 		if [[ $REVPRIME ]]; then
-			echo "$0: REVPRIME = $REVPRIME"
+			echo "REVPRIME = $REVPRIME"
 			cutadapt -a $REVPRIME\
 				-o $m.trimmed.fasta $m.temp.fasta\
 				--discard-untrimmed
@@ -429,19 +413,19 @@ offsetTrim(){
 		OFFSET_TEMP=${i//trimmed/offset.temp}
 		OUTPUT=${i//trimmed/offset}
 		if [[ $FOR_OFFSET ]] && [[ $REV_OFFSET ]]; then
-			echo "$0: Trimming $FOR_OFFSET nucleotides"\
+			echo "Trimming $FOR_OFFSET nucleotides"\
 				"from 5' end of $i"
 			cutadapt -u $FOR_OFFSET -o $OFFSET_TEMP $i
 
-			echo "$0: Trimming $REV_OFFSET nucleotides"\
+			echo "Trimming $REV_OFFSET nucleotides"\
 				"from 3' of $OFFSET_TEMP"
 			cutadapt -u -$REV_OFFSET -o $OUTPUT $OFFSET_TEMP
 		elif [[ $FOR_OFFSET ]]; then
-			echo "$0: Trimming $FOR_OFFSET nucleotides"\
+			echo "Trimming $FOR_OFFSET nucleotides"\
 				"from 5' end of $i"
 			cutadapt -u $FOR_OFFSET -o $OUTPUT $i
 		else
-			echo "$0: Trimming $REV_OFFSET nucleotides"\
+			echo "Trimming $REV_OFFSET nucleotides"\
 				"from 3' of $i"
 			cutadapt -u -$REV_OFFSET -o $OUTPUT $i
 		fi
@@ -481,7 +465,7 @@ phixScreen(){
 	fi
 
 	# Loop bowtie2 over processed fastas
-	echo "$0: Screening for PhiX contamination"
+	echo "Screening for PhiX contamination"
 	for i in ${in_file[@]}; do
 		bowtie2 -f $i -x $PHIX_DB\
 			-S ${i%%.*}.merged.bowtie\
@@ -543,30 +527,11 @@ mothurScreen(){
 		mothur <(mothurBatch remove seqs "${remove_params[*]}")
 		rm -v phix_batch.txt
 	else
-		echo "$0: PhiX.accnos is empty, skipping..."
+		echo "PhiX.accnos is empty, skipping..."
 	fi
 
-	# Create screening_batch.txt and execute
-#	if [[ ! $screen_fasta ]] || [[ ! $screen_groups ]]; then
-#		echo "$0: Error! Zero-length input variables detected"
-#		exit 1
-#	else
-#		echo "screen.seqs(fasta=$screen_fasta, group=$screen_groups,"\
-#			"minlength=200, maxlength=300, maxambig=0, maxhomop=8)"\
-#			> screening_batch.txt
-#		echo "summary.seqs(fasta=current, processors=$THREADS)"\
-#			>> screening_batch.txt
-#		echo "count.groups(group=current)" >> screening_batch.txt
-#	
-#		echo "$0: cat'ing screening_batch.txt" 
-#		cat screening_batch.txt
-#		mothur screening_batch.txt 
-#		rm screening_batch.txt
-#	fi
-
-	# TODO: See if this condensed version of the above still works
 	if [[ ! $screen_fasta ]] || [[ ! $screen_groups ]]; then
-		echo "$0: Error! Zero-length input variables detected"
+		echo "$0: ERROR: Zero-length input variables detected!"
 		exit 1
 	else
 		screen_params=("fasta=$screen_fasta," "group=$screen_groups,"\
@@ -577,7 +542,7 @@ mothurScreen(){
 		mothurBatch summary seqs "${summary_params[*]}" >> screening_batch.txt
 		mothurBatch count groups "group=current" >> screening_batch.txt 
 	
-		echo "$0: cat'ing screening_batch.txt" 
+		echo "cat'ing screening_batch.txt"
 		cat screening_batch.txt
 		mothur screening_batch.txt 
 		rm screening_batch.txt
@@ -620,7 +585,7 @@ groupSplit(){
 		if [[ $i =~ ".$AUTHOR" ]]; then
 			# Remove everything up to "concat."
 			# (i.e. result: author_year_accno.fasta)
-			echo "$0: Renaming output files to"\
+			echo "Renaming output files to"\
 				"format: author_year_accno.fasta"
 			mv -v $i ${i#*good.}
 		fi
@@ -679,6 +644,12 @@ garbageDay(){
 	# Remove PhiX_outs entirely, if it's empty
 	# (equivalent to "rmdir PhiX_outs" without unnecessary errors)
 	find PhiX_outs -maxdepth 0 -empty -exec rmdir {} \;
+
+	# Move all remaining author files to outputs dir
+	mkdir asdMetagen_final && mv $AUTHOR.* asdMetagen_final
+
+	# Move logs to log dir
+	mkdir asdMetagen_logs && mv *.log* asdMetagen_logs
 }
 
 # --------------------
@@ -715,15 +686,15 @@ pathTester(){
 	if [[ $(type -t $1) ]]; then
 		echo "$0: $1 is in PATH"
 	elif [[ $(type -t ./$1) ]]; then
-		echo "$0: Error: $1 is in directory, but not PATH"
-		echo "$0: Exiting..."
+		echo "$0: ERROR: $1 is in directory, but not PATH"
+		echo "Exiting..."
 		exit 1
 	elif [[ $(type -t module) ]]; then
 	    	echo "$0: $1 not found in PATH"
 		echo "$0: Command: module load $2/$3"
 		module load $2/$3
 	else
-		echo "$0: Error: No module, local executable, or path"\
+		echo "$0: ERROR: No module, local executable, or path"\
 			"executable found. Aborting..."
 		exit 1
 	fi
@@ -745,7 +716,7 @@ sufRegex(){
 	elif [[ "$1" =~ "_R1.fastq" ]]; then
 		REV=${1//_R1.fastq/_R2.fastq}
 	else
-		echo "$0: Error: Expected merge suffices not found" >&2
+		echo "$0: ERROR: Expected merge suffices not found" >&2
 		exit 1
 	fi
 }
@@ -774,7 +745,7 @@ groupConcat(){
 
 	for x in $1; do
 		# Concat to fasta designated with authors name (from PWD)
-		echo "$0: Adding $x to $2..."
+		echo "Adding $x to $2..."
 		cat $x >> $2
 	done
 }
@@ -813,7 +784,7 @@ inPrep(){
 		#	file array
 		for i in ${in_type[*]}; do
 			if [[ -f $file ]] && [[ $file =~ $i ]]; then
-				echo "$0: ${file##*/} matches input type $i;"\
+				echo "${file##*/} matches input type $i;"\
 					"adding to input file list"
 				in_file+=("${file##*/}")
 				break
@@ -824,9 +795,9 @@ inPrep(){
 	# Exit if input file array is still empty
 	if [[ ${#in_file[@]} == 0 ]]; then
 		echo "$0: ERROR"
-		echo "$0: No files found in input directory: $IN_DIR,"\
+		echo "No files found in input directory: $IN_DIR,"\
 			"or none matching input type: $in_type"
-		echo "$0: Exiting"
+		echo "Exiting"
 		exit 1
 	fi
 
@@ -858,7 +829,7 @@ outPrep(){
 		#	file array
 		for i in ${out_type[@]}; do
 			if [[ -f $file ]] && [[ $file =~ $i ]]; then
-				echo "$0: $file matches output type $i;"\
+				echo "$file matches output type $i;"\
 					"adding to output file list"
 				out_file+=("$file")
 				break
@@ -891,21 +862,19 @@ main(){
 	logfile=metagen.$(date +%d_%H_%M_%S).log
 	date -u > $logfile
 
-	# Download fastqs by accession number
-	if [[ $SKIP_DOWNLOAD ]]; then
-		echo "$0: Skipping fastq re-download"
-		echo "$0: Moving fastqs to fastq directory for pipeline compatibility"
+	if [[ $DOWNLOAD_ONLY ]]; then
+		srrMunch
+		exit 0
+	else
 		[[ -d fastqs ]] || mkdir fastqs
 		mv *.fastq fastqs
-	else
-		srrMunch 
 	fi
 
 	# Merge forward and reverse reads
 	if [[ $SKIP_MERGE ]]; then
 		#TODO: Clean this up so it's not in main
-		echo "$0: Skipping merge stage"
-		echo "$0: Renaming fastqs and fastq directory for pipeline compatibility"
+		echo "Skipping merge stage"
+		echo "Renaming fastqs and fastq directory for pipeline compatibility"
 		for i in fastqs/*.fastq; do
 			mv $i ${i%.fastq}.merged.fastq
 		done
@@ -922,7 +891,7 @@ main(){
 	if [[ $FOR_OFFSET ]] || [[ $REV_OFFSET ]]; then
 		offsetTrim
 	else
-		echo "$0: no offset specified, make sure this"\
+		echo "No offset specified, make sure this"\
 			"is the right target region! (In this case: 520F-802R)"
 	fi
 
