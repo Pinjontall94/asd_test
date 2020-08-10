@@ -494,7 +494,7 @@ phixScreen(){
 
 	# Concatenate PhiX screened fastas to single file
 	# (identified by $AUTHOR)
-	groupConcat "*.screened.fasta" $AUTHOR.concat.fasta
+	cat *.screened.fasta >> $AUTHOR.concat.fasta
 
 	# Create output folder for screened fastas (separate from other PhiX outputs)
 	mkdir screened_fastas && mv *.screened.fasta screened_fastas
@@ -629,7 +629,7 @@ fastaHeaderrelabel(){
 
 	# Concatenate output files to single barcoded fasta
 	# (also identified by $AUTHOR)
-	groupConcat "*bar.fasta" $AUTHOR.barcoded.fasta
+	cat *.bar.fasta >> $AUTHOR.barcoded.fasta
 
 	out_type=bar.fasta
 	outPrep split_fastas relabeled_fastas
@@ -734,20 +734,6 @@ joinBy(){
 	echo "$*"
 
 	IFS=$OIF
-}
-
-
-groupConcat(){
-	# Concat all specified files and save to a defined output
-
-	# INPUT: $1
-	# OUTPUT: $2
-
-	for x in $1; do
-		# Concat to fasta designated with authors name (from PWD)
-		echo "Adding $x to $2..."
-		cat $x >> $2
-	done
 }
 
 
