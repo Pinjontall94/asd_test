@@ -773,7 +773,7 @@ inPrep(){
 		#	file array
 		for i in ${in_type[*]}; do
 			if [[ -f $file ]] && [[ $file =~ $i ]]; then
-				echo "${file##*/} matches input type $i;"\
+				echo "$AUTHOR/${file##*/} matches input type $i;"\
 					"adding to input file list"
 				in_file+=("${file##*/}")
 				break
@@ -784,7 +784,7 @@ inPrep(){
 	# Exit if input file array is still empty
 	if [[ ${#in_file[@]} == 0 ]]; then
 		echo "$0: ERROR"
-		echo "No files found in input directory: $IN_DIR,"\
+		echo "No files found in input directory: $AUTHOR/$IN_DIR,"\
 			"or none matching input type: $in_type"
 		echo "Exiting"
 		exit 1
@@ -818,7 +818,7 @@ outPrep(){
 		#	file array
 		for i in ${out_type[@]}; do
 			if [[ -f $file ]] && [[ $file =~ $i ]]; then
-				echo "$file matches output type $i;"\
+				echo "$AUTHOR/$file matches output type $i;"\
 					"adding to output file list"
 				out_file+=("$file")
 				break
