@@ -287,9 +287,9 @@ mergeSeqs(){
 					"re-run fastq-dump before proceeding"
 				exit 0
 			fi
-		else
-			echo "Copying pre-merged read $i to 'merged_fastqs'"
-			cp -i $i merged_fastqs
+		elif [[ ! $i =~ _(1|2).fastq ]] # Matches reads w/o "_1" or "_2"
+			echo "Renaming pre-merged read $i to ${i//fastq/merged.fastq}"
+			mv -v $i ${i%.fastq}.merged.fastq
 		fi
 	done
 	
@@ -856,7 +856,7 @@ main(){
 		exit 0
 	else
 		[[ -d fastqs ]] || mkdir fastqs
-		mv *.fastq fastqs
+		#mv -v *.fastq fastqs # Unnecessary, only for preexisting fastqs
 	fi
 
 	# Merge forward and reverse reads
