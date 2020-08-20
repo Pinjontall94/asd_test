@@ -287,7 +287,7 @@ mergeSeqs(){
 					"re-run fastq-dump before proceeding"
 				exit 0
 			fi
-		elif [[ ! $i =~ _(1|2).fastq ]] # Matches reads w/o "_1" or "_2"
+		elif [[ ! $i =~ _(1|2).fastq ]]; then # Matches reads w/o "_1" or "_2"
 			echo "Renaming pre-merged read $i to ${i//fastq/merged.fastq}"
 			mv -v $i ${i%.fastq}.merged.fastq
 		else
