@@ -2,7 +2,7 @@
 # asdMetagen -- A bash script to prepare unmerged 16S V4 fastqs for
 #			metagenomic analysis. 
 
-# AUTHOR: Sam Johnson
+# DEVELOPER: Sam Johnson
 # LICENSE: AGPL-3.0-or-later
 #	https://www.gnu.org/licenses/agpl-3.0.html
 # DEPENDS: poppler-utils v0.87.0-1, bash v5.0.016-1, bbmap v38.00, mothur v1.39.5, 
@@ -18,6 +18,12 @@ ACCESSION_LIST=SRR_Acc_List.txt
 
 # Set author (from current directory)
 AUTHOR=${PWD##*/}
+if [[ $AUTHOR =~ "-" ]]; then
+	echo "ERROR: Hyphens are not supported in dataset directory names,"\
+		"due to mothur dependency."
+	echo "Please rename working directory before re-running."
+	exit 1
+fi
 
 # Set Dependency Module Versions & Names
 SRA_MODULE=sratoolkit
@@ -858,18 +864,17 @@ main(){
 		exit 0
 	else
 		[[ -d fastqs ]] || mkdir fastqs
-		#mv -v *.fastq fastqs # Unnecessary, only for preexisting fastqs
 	fi
 
 	# Merge forward and reverse reads
 	if [[ $SKIP_MERGE ]]; then
 		#TODO: Clean this up so it's not in main
 		echo "Skipping merge stage"
-		echo "Renaming fastqs and fastq directory for pipeline compatibility"
-		for i in fastqs/*.fastq; do
-			mv $i ${i%.fastq}.merged.fastq
-		done
-		mv fastqs merged_fastqs
+#		echo "Renaming fastqs and fastq directory for pipeline compatibility"
+#		for i in fastqs/*.fastq; do
+#			mv $i ${i%.fastq}.merged.fastq
+#		done
+#		mv fastqs merged_fastqs
 	else
 		mergeSeqs
 	fi
