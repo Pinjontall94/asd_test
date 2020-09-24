@@ -134,11 +134,11 @@ if [[ ! $DOWNLOAD_ONLY ]]; then
 			"${0#./} without the '-d' flag"
 		echo "Exiting..."
 		exit 1
-	elif [[ ! $FORPRIME ]] || [[ ! $REVPRIME ]]; then
-		echo "$0: ERROR: Primers missing! Please specify primers with"\
-			"the '-f' and '-r' flags before re-running"
-		echo "Exiting..."
-		exit 1
+#	elif [[ ! $FORPRIME ]] || [[ ! $REVPRIME ]]; then
+#		echo "$0: ERROR: Primers missing! Please specify primers with"\
+#			"the '-f' and '-r' flags before re-running"
+#		echo "Exiting..."
+#		exit 1
 	fi
 fi
 
@@ -413,16 +413,27 @@ offsetTrim(){
 	# 
 	pathTester cutadapt $CUTADAPT_MODULE $CUTADAPT_MOD_VER
 
+	##TODO: Clean up input and output mess in this function
 	# Set input type
 	in_type=fasta
 
 	# Move input files to working directory
 	inPrep trimmed_fastas
 
+	if [[ ! $FORPRIME ]] && [[ ! $REVPRIME ]]; then
+		echo "TEST 1"
+		in_type=fasta
+		inPrep merged_fastas
+	else
+		echo "TEST 2"
+		in_type=trimmed.fasta
+		inPrep trimmed_fastas
+	fi
+
 	for i in ${in_file[@]}; do
-		PRE_OFFSET=${i//trimmed/preoffset}
-		OFFSET_TEMP=${i//trimmed/offset.temp}
-		OUTPUT=${i//trimmed/offset}
+		PRE_OFFSET=${i%.fasta}.preoffset.fasta
+		OFFSET_TEMP=${i%.fasta}.offset.temp.fasta
+		OUTPUT=${i%.fasta}.offset.fasta
 		if [[ $FOR_OFFSET ]] && [[ $REV_OFFSET ]]; then
 			echo "Trimming $FOR_OFFSET nucleotides"\
 				"from 5' end of $i"
@@ -447,7 +458,11 @@ offsetTrim(){
 
 	# Move inputs and outputs back to corresponding directories
 	out_type=offset
-	outPrep trimmed_fastas offset_fastas
+	if [[ ! $FORPRIME ]] && [[ ! $REVPRIME ]]; then
+		outprep merged_fastas offset_fastas
+	else
+		outPrep trimmed_fastas offset_fastas
+	fi
 }
 
 phixScreen(){
@@ -881,7 +896,11 @@ main(){
 
 	q2aReformat
 	groupFormatter
-	trimLoop
+
+	# Trim primers
+	if [[ $FORPRIME ]] || [[ $REVPRIME ]]; then
+		trimLoop
+	fi
 
 	# Trim nucleotide offset
 	if [[ $FOR_OFFSET ]] || [[ $REV_OFFSET ]]; then
