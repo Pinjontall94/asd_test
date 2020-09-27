@@ -415,10 +415,10 @@ offsetTrim(){
 
 	##TODO: Clean up input and output mess in this function
 	# Set input type
-	in_type=fasta
+#	in_type=fasta
 
 	# Move input files to working directory
-	inPrep trimmed_fastas
+#	inPrep trimmed_fastas
 
 	if [[ ! $FORPRIME ]] && [[ ! $REVPRIME ]]; then
 		echo "TEST 1"
