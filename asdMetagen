@@ -382,7 +382,7 @@ trimLoop(){
 	pathTester cutadapt $CUTADAPT_MODULE $CUTADAPT_MOD_VER
 
 	echo "Trimming primers..."
-	echo "FORPRIME = $FORPRIME REVPRIME = $REVPRIME"
+	echo "FORPRIME = $FORPRIME \t REVPRIME = $REVPRIME"
 
 	for i in ${in_file[@]}; do
 		m=${i%.fasta}
@@ -401,8 +401,8 @@ trimLoop(){
 		fi
 
 		if [[ $REVPRIME ]] && [[ ! $FORPRIME ]]; then
-			echo "FORPRIME = $FORPRIME"
-			cutadapt -g $FORPRIME\
+			echo "REVPRIME = $REVPRIME"
+			cutadapt -a $REVPRIME\
 				-o $m.temp.fasta $i\
 				--discard-untrimmed
 		fi
