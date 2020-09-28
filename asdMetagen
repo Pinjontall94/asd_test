@@ -459,9 +459,15 @@ offsetTrim(){
 	# Move inputs and outputs back to corresponding directories
 	out_type=offset
 	if [[ ! $FORPRIME ]] && [[ ! $REVPRIME ]]; then
-		outprep merged_fastas offset_fastas
+		#outprep merged_fastas offset_fastas
+		mv *.merged.fasta merged_fastas
+		mkdir offset_fastas
+		mv *.offset.fasta offset_fastas
 	else
-		outPrep trimmed_fastas offset_fastas
+		#outPrep trimmed_fastas offset_fastas
+		mv *.trimmed.fasta trimmed_fastas
+		mkdir offset_fastas
+		mv *.offset.fasta offset_fastas
 	fi
 }
 
