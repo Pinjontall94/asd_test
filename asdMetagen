@@ -403,7 +403,7 @@ trimLoop(){
 		if [[ $REVPRIME ]] && [[ ! $FORPRIME ]]; then
 			echo "REVPRIME = $REVPRIME"
 			cutadapt -a $REVPRIME\
-				-o $m.temp.fasta $i\
+				-o $m.trimmed.fasta $i\
 				--discard-untrimmed
 		fi
 	
