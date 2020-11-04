@@ -13,3 +13,6 @@ original/
 otutest/
 next_two_accnos
 colExt.awk
+*.err
+*.out
+test_datasets/
