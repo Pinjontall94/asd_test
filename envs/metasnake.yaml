@@ -1,0 +1,10 @@
+# conda environments needed for the workflow should be stored here.
+channels:
+ - conda-forge
+ - bioconda
+dependencies:
+ - sratoolkit=2.10.0
+ - bbmap=38.82
+ - cutadapt=2.0
+ - mothur=1.39.5
+ - bowtie2=2.3.4.1
