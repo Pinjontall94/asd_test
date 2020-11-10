@@ -185,7 +185,8 @@ mapOTUs(){
 
 readmap2file(){
 	# Convert the readmap to an OTU table
-	python2 create_otu_table_from_uc_file.py\
+	# TODO: Reimplement this script so this can all be one file
+	create_otu_table_from_uc_file.py\
 		-i metaan.otus.nc.readmap.uc\
 		-o metaan.otus.final.readmap.table
 }
