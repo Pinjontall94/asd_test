@@ -7,13 +7,15 @@
 
 	# Deps: fastq-dump from NCBI SRA Toolkit
 
+	# Usage: srrMunch <SraRunTable.txt> <SRR_Acc_List.txt>
+
 	# Check Run Table first for a list of 16S seqs
 	# TODO: check that the following snippet accurately grabs the accession
 	#    16S accession numbers from the correct column
 
 	# Determine Run Table delimiter (commas or tabs)
-	comma_count=$(grep -o "," SraRunTable.txt | wc -c)
-	tab_count=$(grep -o "\t" SraRunTable.txt | wc -c)
+	comma_count=$(grep -o "," $1 | wc -c)
+	tab_count=$(grep -o "\t" $1 | wc -c)
 	if ((comma_count > tab_count)); then
 		echo "$comma_count commas > $tab_count tabs"
 		echo "$0: Setting delimiter to commas"
@@ -40,7 +42,7 @@
 		# Print all entries in the target column if they have '16S' in their row
 		#    (skipping the header row, of course)
 		NR>1 && /16S/ { print $target }
-		' SraRunTable.txt > 16S_list.txt.temp
+		' $1 > 16S_list.txt.temp
 
 	# Set which list to loop fastq-dump over
 	if [[ -s 16S_list.txt.temp ]]; then
@@ -49,14 +51,13 @@
 	else
 		echo "$0: awk filter failed to find 16S seqs,"\
 			"leaving filtering duties to cutadapt.."
-		READ_LIST=$ACCESSION_LIST
+		READ_LIST=$2
 	fi
 
 	echo "Looping through $READ_LIST with sratoolkit and" \
 		"unpacking fastqs..."
 
 	# Loop fastq-dump over Accession Number list
-	pathTester fastq-dump $SRA_MODULE $SRA_MOD_VER
 	while read accno; do
 		fastq-dump --split-3 --gzip $accno 2>>fastq-dump.err
 	done < $READ_LIST

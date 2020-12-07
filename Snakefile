@@ -1,34 +1,40 @@
+
+#TODO: use 16S filter to generate accno list for use in config file
+configfile: "config.yaml"
+
+rule all:
+    input:
+        "outputs/author.barcoded.fasta"
+
 rule srrMunch:
     input:
-        "SraRunTable.txt"
-        "SRR_Acc_List.txt"
+        runtable="SraRunTable.txt"
+        acc="SRR_Acc_List.txt"
     output:
-        "fastqs/read_1.fastq"
-        "fastqs/read_2.fastq"
-    shell:
+        "fastqs/{sample}.fastq"
+    script:
+        "scripts/srrMunch.sh {input.runtable} {input.acc}"
 
 rule mergeSeqs:
     input:
-        "fastqs/read_1.fastq"
-        "fastqs/read_2.fastq"
+        fwd="fastqs/{sample}_1.fastq"
+        rev="fastqs/{sample}_2.fastq"
     output:
-        "merged_fastqs/read.fastq"
+        "merged_fastqs/{sample}.fastq"
     shell:
-        "bbmerge.sh in1={input} in2={input} out={output}"
-        "./scripts/mergeSeqs.sh"
-
+        "bbmerge.sh in1={input.fwd} in2={input.rev} out={output}"
 
 rule q2aReformat:
     input:
-        "merged_fastqs/read.fastq"
+        "merged_fastqs/{sample}.fastq"
     output:
-        "fastas/read.fasta"
+        "fastas/{sample}.fasta"
     shell:
         "./scripts/q2aReformat.sh"
 
 rule groupFormatter:
     input:
-        "fastas/read.fasta"
+        "fastas/{sample}.fasta"
     output:
         "mothur_in/author.group"
     shell:
@@ -36,24 +42,24 @@ rule groupFormatter:
 
 rule trimLoop:
     input:
-        "fastas/read.fasta"
+        "fastas/{sample}.fasta"
     output:
-        "trimmed/read.fasta"
+        "trimmed/{sample}.fasta"
     shell:
         "./scripts/trimLoop.sh"
 
 rule offsetTrim:
     input:
-        "trimmed/read.fasta"
+        "trimmed/{sample}.fasta"
     output:
-        "offset/read.fasta"
+        "offset/{sample}.fasta"
     shell:
         "./scripts/offsetTrim.sh"
 
 rule phixScreen:
     input:
-        "trimmed/read.fasta"
-        "offset/read.fasta"
+        "trimmed/{sample}.fasta"
+        "offset/{sample}.fasta"
     output:
         "screened/author.concat.fasta"
         "screened/author.PhiX"
@@ -73,14 +79,14 @@ rule groupSplit:
     input:
         "mothur_out/good.fasta"
     output:
-        "split/read.fasta"
+        "split/{sample}.fasta"
     shell:
         "./scripts/groupSplit.sh"
 
 rule fastaHeaderrelabel:
     input:
-        "split/read.fasta"
+        "split/{sample}.fasta"
     output:
-        "barcoded/read.fasta"
+        "barcoded/author.barcoded.fasta"
     shell:
         "./scripts/fastaHeaderrelabel.sh"
