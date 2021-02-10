@@ -4,7 +4,7 @@
 #		with a ".barcoded.fasta" extension, as well as
 #		create_otu_table_from_uc_file.py
 #
-# Usage: otuGen -d <taxo_db>
+# Usage: otuGen -d <taxo_db> -f <input_fasta_file>
 
 # AUTHOR: Sam Johnson
 # LICENSE: AGPL-3.0-or-later
@@ -18,12 +18,13 @@ MOTHUR_MODULE=mothur
 MOTHUR_MOD_VER=1.39.5
 
 usage(){
-	echo "Usage: $0 [options] -d <taxo_db_dir>"
+	echo "Usage: $0 [options] -d <taxo_db_dir> -f <input_fasta>"
 	echo "	-h : help"
 	echo "	-l : local mode (restricts default thread count)"
 	echo "	-d <taxonomic_database_directory>"\
 		": Set taxonomic databases to classify OTUs [REQUIRED]"
 	echo "    Ex: $0 -ld silva_v138_mothur"
+	echo "	-f <input_fasta_file> [REQUIRED]"
 }
 
 # If no arguments, print usage statement and exit
@@ -33,7 +34,7 @@ if (($# == 0)); then
 fi
 
 # Define use flags
-while getopts ":hld:" FLAGS; do
+while getopts ":hld:f:" FLAGS; do
 	case "$FLAGS" in
 		h)
 			usage
@@ -47,6 +48,9 @@ while getopts ":hld:" FLAGS; do
 			;;
 		d)
 			TAXO_DB=$OPTARG
+			;;
+		f)
+			INPUT_FILE=$OPTARG
 			;;
 		:)
 			echo "$0: Option -$OPTARG requires an argument"
@@ -128,7 +132,7 @@ derep(){
 	# 	via the --minuniquesize command; setting this to 2 would 
 	# 	generate OTUs represented by 2 or more sequences"
 	
-	vsearch --derep_fulllength metaan.barcoded.fasta\
+	vsearch --derep_fulllength $1\
 		--sizein --sizeout --minuniquesize 2\
 		--output metaan.derep.fasta
 }
@@ -186,7 +190,7 @@ mapOTUs(){
 readmap2file(){
 	# Convert the readmap to an OTU table
 	# TODO: Reimplement this script so this can all be one file
-	create_otu_table_from_uc_file.py\
+	./create_otu_table_from_uc_file.py\
 		-i metaan.otus.nc.readmap.uc\
 		-o metaan.otus.final.readmap.table
 }
@@ -197,11 +201,7 @@ readmap2file(){
 # =============
 
 main(){
-	for i in *.barcoded.fasta; do
-		echo "adding $i to metaan.barcoded.fasta"
-		cat $i >> metaan.barcoded.fasta
-	done
-	derep 
+	derep $INPUT_FILE
 	clusterOTUs
 	chimeraScreen
 	taxoClassify 
