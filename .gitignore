@@ -16,3 +16,5 @@ colExt.awk
 *.err
 *.out
 test_datasets/
+.Rproj.user
+/scripts/srrMunch_bak.sh

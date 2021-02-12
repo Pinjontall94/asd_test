@@ -168,7 +168,7 @@ taxoClassify(){
 	TAXO_PARAMS+=("fasta=metaan.otus.nc.fasta,"\
 		"template=$TAXO_TEMPLATE,"\
 		"taxonomy=$TAXO_NOMY,"\
-		"cutoff=80", "output=metaan.otus.nc.good.wang.taxonomy")
+		"cutoff=80") #, "output=metaan.otus.nc.good.wang.taxonomy")
 	LINEAGE_PARAMS+=("fasta=metaan.otus.nc.fasta,"\
 		"taxonomy=metaan.otus.nc.nr_v138.wang.taxonomy, taxon=unknown")
 	mothurBatch classify seqs "${TAXO_PARAMS[*]}" > taxo_batch.txt
@@ -180,17 +180,17 @@ taxoClassify(){
 
 mapOTUs(){
 	# Maps OTUs against reads and converts them to an OTU table
-	vsearch --usearch_global metaan.barcoded.fasta\
+	vsearch --usearch_global $1\
 		-db metaan.otus.nc.pick.fasta\
 		--uc metaan.otus.nc.readmap.uc --id 0.97\
-		--strand plus --threads $THREADS
+		--strand plus
 }
 
 
 readmap2file(){
 	# Convert the readmap to an OTU table
 	# TODO: Reimplement this script so this can all be one file
-	./create_otu_table_from_uc_file.py\
+	./scripts/create_otu_table_from_uc_file.py\
 		-i metaan.otus.nc.readmap.uc\
 		-o metaan.otus.final.readmap.table
 }
@@ -205,7 +205,7 @@ main(){
 	clusterOTUs
 	chimeraScreen
 	taxoClassify 
-	mapOTUs
+	mapOTUs $INPUT_FILE
 	readmap2file
 }
 main
